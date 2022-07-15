@@ -7,6 +7,11 @@ import "openzeppelin-contracts/contracts/access/Ownable.sol";
 
 error NonExistentTokenURI();
 error WithdrawTransfer();
+error ProtectionNotExpired();
+
+interface NFTfi {
+    function loanRepaidOrLiquidated(uint32) external view returns (bool);
+}
 
 /**
  * @title Gradient Insurance (v0.1) contract
@@ -14,27 +19,31 @@ error WithdrawTransfer();
  * @dev ERC721 contract from which NFTs are minted to represent loan protection.
  **/
 contract Insurance is ERC721, Ownable, ERC721TokenReceiver {
-
     using Strings for uint256;
     string public baseURI = "";
     uint256 public currentTokenId;
     address payee;
+    address nftfiAddress;
 
     mapping(uint256 => uint256) private stake;
+    mapping(uint256 => uint32) private connection;
 
-    constructor() ERC721("Gradient Insurance", "INSURANCE") {
+    constructor(address nftfi) ERC721("Gradient Insurance", "INSURANCE") {
         payee = msg.sender;
+        nftfiAddress = nftfi;
     }
 
     /**
     * @dev Mints ERC721 token that represents loan protection
     * @param recipient is the receiver address of the loan
+    * @param nftfiId is the id of the NFTfi Promissory Note
     **/
-    function mintProtection(address recipient) public payable onlyOwner {
+    function mintProtection(address recipient, uint32 nftfiId) public payable onlyOwner {
         uint256 newTokenId = ++currentTokenId;
 
         /// msg.value value is amount of funds staked to cover the protection in case of default
         stake[newTokenId] = msg.value;
+        connection[newTokenId] = nftfiId;
         _safeMint(recipient, newTokenId);
     }
 
@@ -59,15 +68,27 @@ contract Insurance is ERC721, Ownable, ERC721TokenReceiver {
     }
 
     /**
-    * @dev Burns ERC721 token and returns stake when borrower pays back the loan.
-    * @param tokenId is the token id 
+    * @dev Sets the NFTfi address
+    * @param _counter is the NFTfi main smart contract address
     **/
-    function borrowerPay(uint256 tokenId) external onlyOwner {
-        (bool transferTx, ) = payee.call{value: stake[tokenId]}("");
-        if (!transferTx) {
-            revert WithdrawTransfer();
+    function setNFTfiAddress(address _counter) external onlyOwner {
+       nftfiAddress = _counter;
+    }
+
+    /**
+    * @dev Burns ERC721 token and returns stake when borrower pays back the loan.
+    * @param NFTfiId is the id of the NFTfi Promissory Note
+    **/
+    function borrowerPayed(uint32 NFTfiId) external {
+        if (NFTfi(nftfiAddress).loanRepaidOrLiquidated(NFTfiId)) {
+            uint256 TokenId = connection[NFTfiId];
+            (bool transferTx, ) = payee.call{value: stake[TokenId]}("");
+            if (!transferTx) {
+                revert WithdrawTransfer();
+            }
+            _burn(TokenId);
         }
-        _burn(tokenId);
+        revert ProtectionNotExpired();
     }
 
     /**
