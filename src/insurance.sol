@@ -8,6 +8,7 @@ import "openzeppelin-contracts/contracts/access/Ownable.sol";
 error NonExistentTokenURI();
 error WithdrawTransfer();
 error ProtectionNotExpired();
+error ProtectionNonExistent();
 
 interface NFTfi {
     function loanRepaidOrLiquidated(uint32) external view returns (bool);
@@ -15,18 +16,16 @@ interface NFTfi {
 
 /**
  * @title Gradient Insurance (v0.1) contract
- * @author Gradient (cairoeth, ...)
+ * @author @cairoeth
  * @dev ERC721 contract from which NFTs are minted to represent loan protection.
  **/
 contract Insurance is ERC721, Ownable, ERC721TokenReceiver {
     using Strings for uint256;
     string public baseURI = "";
-    uint256 public currentTokenId;
     address payee;
     address nftfiAddress;
 
     mapping(uint256 => uint256) private stake;
-    mapping(uint256 => uint32) private connection;
 
     constructor(address nftfi) ERC721("Gradient Insurance", "INSURANCE") {
         payee = msg.sender;
@@ -39,12 +38,9 @@ contract Insurance is ERC721, Ownable, ERC721TokenReceiver {
     * @param nftfiId is the id of the NFTfi Promissory Note
     **/
     function mintProtection(address recipient, uint32 nftfiId) public payable onlyOwner {
-        uint256 newTokenId = ++currentTokenId;
-
         /// msg.value value is amount of funds staked to cover the protection in case of default
         stake[newTokenId] = msg.value;
-        connection[newTokenId] = nftfiId;
-        _safeMint(recipient, newTokenId);
+        _safeMint(recipient, nftfiId);
     }
 
     /**
@@ -77,16 +73,16 @@ contract Insurance is ERC721, Ownable, ERC721TokenReceiver {
 
     /**
     * @dev Burns ERC721 token and returns stake when borrower pays back the loan.
-    * @param NFTfiId is the id of the NFTfi Promissory Note
+    * @param nftfiId is the id of the NFTfi Promissory Note/protection NFT 
     **/
-    function borrowerPayed(uint32 NFTfiId) external {
-        if (NFTfi(nftfiAddress).loanRepaidOrLiquidated(NFTfiId)) {
-            uint256 TokenId = connection[NFTfiId];
-            (bool transferTx, ) = payee.call{value: stake[TokenId]}("");
+    function borrowerPayed(uint32 nftfiId) external {
+        if (NFTfi(nftfiAddress).loanRepaidOrLiquidated(nftfiId)) {
+            _burn(nftfiId);
+            (bool transferTx, ) = payee.call{value: stake[nftfiId]}("");
             if (!transferTx) {
                 revert WithdrawTransfer();
             }
-            _burn(TokenId);
+            stake[nftfiId] = 0;
         }
         revert ProtectionNotExpired();
     }
@@ -100,6 +96,64 @@ contract Insurance is ERC721, Ownable, ERC721TokenReceiver {
         uint256,
         bytes calldata
     ) external override virtual returns (bytes4) {
+        /// liquidate nft with a dutch auction through seaport
         return ERC721TokenReceiver.onERC721Received.selector;
+    }
+
+    /**
+    * @dev Covers protection and losses after collateral is liquidated.
+    * @param liquidation is the $ earned from the collateral dutch auction
+    * @param nftfiId is the id of the NFTfi Promissory Note/protection NFT
+    **/
+    function coverLosses(uint64 liquidation, uint32 nftfiId) external {
+        uint32 upperBound = 200;
+        uint32 lowerBound = 100;
+        address receiver = _ownerOf[nftfiId];
+        /// Check if nftfiId is burned or not
+        if (receiver == address(0)) {
+            revert ProtectionNonExistent();
+        }
+
+        /// Option A
+        if (liquidation > upperBound) {
+            _burn(nftfiId);
+            /// Return all $ from the liquidation to protection owner
+            (bool transferTx, ) = receiver.call{value: liquidation}("");
+            if (!transferTx) {
+                revert WithdrawTransfer();
+            }
+            /// Return stake
+            (bool transferTx, ) = payee.call{value: stake[nftfiId]}("");
+            if (!transferTx) {
+                revert WithdrawTransfer();
+            }
+            stake[nftfiId] = 0;
+        }
+        /// Option B
+        else if (lowerBound < liquidation < upperBound) {
+            _burn(nftfiId);
+            uint32 losses = upperBound - liquidation;
+            stake[nftfiId] - losses;
+            /// Return all $ from the liquidation to protection owner and cover lossses
+            (bool transferTx, ) = receiver.call{value: liquidation + losses}("");
+            if (!transferTx) {
+                revert WithdrawTransfer();
+            }
+            /// Return remaining stake, if any.
+            (bool transferTx, ) = payee.call{value: stake[nftfiId]}("");
+            if (!transferTx) {
+                revert WithdrawTransfer();
+            }
+        }
+        /// Option C
+        else if (liquidation < lowerBound) {
+            _burn(nftfiId);
+            /// Return all $ from the liquidation and protection to protection owner
+            (bool transferTx, ) = receiver.call{value: liquidation + stake[nftfiId]}("");
+            if (!transferTx) {
+                revert WithdrawTransfer();
+            }
+            stake[nftfiId] = 0;
+        }
     }
 }
