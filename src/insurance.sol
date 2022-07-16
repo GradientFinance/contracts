@@ -111,9 +111,7 @@ contract Insurance is ERC721, Ownable, ERC721TokenReceiver {
     **/
     function coverLosses(uint256 liquidation, uint32 nftfiId) external onlyOwner {
         /// Check if nftfiId is burned or not
-        if (_ownerOf[nftfiId] == address(0)) {
-            revert ProtectionNonExistent();
-        }
+        require(_ownerOf[nftfiId] != address(0x0));
 
         /// Option A
         if (liquidation > upperBound[nftfiId]) {
@@ -133,7 +131,7 @@ contract Insurance is ERC721, Ownable, ERC721TokenReceiver {
         /// Option B
         else if (lowerBound[nftfiId] < liquidation && liquidation < upperBound[nftfiId]) {
             _burn(nftfiId);
-            uint64 losses = upperBound[nftfiId] - liquidation;
+            uint256 losses = upperBound[nftfiId] - liquidation;
             stake[nftfiId] - losses;
             /// Return all $ from the liquidation to protection owner and cover lossses
             (bool transferTx1, ) = _ownerOf[nftfiId].call{value: liquidation + losses}("");
