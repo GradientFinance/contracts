@@ -5,19 +5,10 @@ import "solmate/tokens/ERC721.sol";
 import "solmate/utils/ReentrancyGuard.sol";
 import "openzeppelin-contracts/contracts/utils/Strings.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
-import {
-    OrderType,
-    BasicOrderType,
-    ItemType,
-    Side
-} from "./ConsiderationEnums.sol";
-
-import {OrderParameters, Order, OfferItem, ConsiderationItem} from "./ConsiderationStructs.sol";
 
 error NonExistentTokenURI();
 error WithdrawTransfer();
 error ProtectionNotExpired();
-error CollateralNotLiquidated();
 
 interface NFTfi {
     function loanRepaidOrLiquidated(uint32) external view returns (bool);
@@ -46,7 +37,6 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
     string public baseURI = "";
     address payee;
     address nftfiAddress;
-    uint256 internal globalSalt;
 
     NFTfi NFTfiContract = NFTfi(nftfiAddress);
 
@@ -54,14 +44,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
     mapping(uint32 => uint32) private lowerBound;
     mapping(uint32 => uint32) private upperBound;
     mapping(uint32 => uint256) private liquidationValue;
-    mapping(uint32 => bool) private liquidationStatus;
     mapping(string => uint32) private collateralToProtection;
-
-    // Declaring Seaport structure objects
-    OfferItem[] _offerItem;
-    ConsiderationItem[] _considerationItem;
-    OrderParameters _orderParameters;
-    Order _order;
 
     constructor(address nftfi) ERC721("Gradient Protection", "PROTECTION") {
         payee = msg.sender;
@@ -138,7 +121,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
         require(_ownerOf[nftfiId] != address(0), "Protection does not exist");
 
         /// Closes a expired protection when the borrower payed back or when the lender wants to keep the collateral
-        if (NFTfiContract.loanRepaidOrLiquidated(nftfiId) && liquidationValue[nftfiId] == 0 && !liquidationStatus[nftfiId]) {
+        if (NFTfiContract.loanRepaidOrLiquidated(nftfiId) && liquidationValue[nftfiId] == 0) {
             _burn(nftfiId);
             (bool transferTx, ) = payee.call{value: stake[nftfiId]}("");
             if (!transferTx) {
@@ -147,7 +130,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
             stake[nftfiId] = 0;
         }
         /// Closes a protection after the collateral has been liquidated by covering any losses
-        else if  (NFTfiContract.loanRepaidOrLiquidated(nftfiId) && liquidationValue[nftfiId] > 0 && liquidationStatus[nftfiId]) {
+        else if  (NFTfiContract.loanRepaidOrLiquidated(nftfiId) && liquidationValue[nftfiId] > 0) {
             /// Option A: The collateral is liquidated at a price above the upper-bound of the protection 
             if (liquidationValue[nftfiId] > upperBound[nftfiId]) {
                 _burn(nftfiId);
@@ -189,102 +172,9 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
                 }
                 stake[nftfiId] = 0;
             }
-            /// Collateral liquidation is activate and but not sold yet
-            else if (NFTfiContract.loanRepaidOrLiquidated(nftfiId) && liquidationStatus[nftfiId]) {
-                revert CollateralNotLiquidated();
-            }
         }
         else {
             revert ProtectionNotExpired();
         }
-    }
-
-    /**
-    * @dev Liquidation executed by the lender when the borrower defaults and the lender wants to cover any losses.
-    **/
-    function onERC721Received(
-        address _operator,
-        address _from,
-        uint256 _tokenId,
-        bytes calldata
-    ) external override virtual returns (bytes4) {
-        uint32 nftfiId = collateralToProtection[string(abi.encodePacked(toAsciiString(msg.sender),'',Strings.toString(_tokenId)))];
-        require(_ownerOf[nftfiId] != address(0), "Protection does not exist");
-
-        /// liquidate nft with a dutch auction through seaport
-
-        /**
-         *   ========= OfferItem ==========
-         *   ItemType itemType;
-         *   address token;
-         *   uint256 identifierOrCriteria;
-         *   uint256 startAmount;
-         *   uint256 endAmount;
-         */
-        _offerItem = OfferItem(
-            ItemType.ERC721, 
-            msg.sender, 
-            _tokenId, 
-            1, 
-            1
-        );
-
-        /**
-         *   ========= ConsiderationItem ==========
-         *   ItemType itemType;
-         *   address token;
-         *   uint256 identifierOrCriteria;
-         *   uint256 startAmount;
-         *   uint256 endAmount;
-         *   address payable recipient;
-         */
-        _considerationItem = ConsiderationItem(
-            ItemType.NATIVE,
-            address(0),
-            0,
-            150000000000000000000,
-            0,
-            payable(address(this))
-        );
-
-        /**
-         *   ========= OrderParameters ==========
-         *   address offerer;
-         *   address zone;
-         *   struct OfferItem[] offer;
-         *   struct ConsiderationItem[] consideration;
-         *   enum OrderType orderType;
-         *   uint256 startTime;
-         *   uint256 endTime;
-         *   bytes32 zoneHash;
-         *   uint256 salt;
-         *   bytes32 conduitKey;
-         *   uint256 totalOriginalConsiderationItems;
-         */
-        _orderParameters = OrderParameters(
-            address(this), 
-            address(0),
-            _offerItem,
-            _considerationItem,
-            OrderType.FULL_RESTRICTED,
-            block.timestamp,
-            block.timestamp + 1 days,
-            bytes32(0),
-            globalSalt++,
-            bytes32(0),
-            1
-        );
-
-        // EIP 1271 Signature
-
-        /**
-         *   ========= Order ==========
-         *   struct OrderParameters parameters;
-         *   bytes signature;
-         */
-        // _order = Order(_orderParameters);
-
-        liquidationStatus[nftfiId] = true;
-        return ERC721TokenReceiver.onERC721Received.selector;
     }
 }
