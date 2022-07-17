@@ -5,6 +5,14 @@ import "solmate/tokens/ERC721.sol";
 import "solmate/utils/ReentrancyGuard.sol";
 import "openzeppelin-contracts/contracts/utils/Strings.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
+import {
+    OrderType,
+    BasicOrderType,
+    ItemType,
+    Side
+} from "./ConsiderationEnums.sol";
+
+import {OrderParameters, Order} from "./ConsiderationStructs.sol";
 
 error NonExistentTokenURI();
 error WithdrawTransfer();
@@ -174,7 +182,9 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
     ) external override virtual returns (bytes4) {
         uint32 nftfiId = collateralToProtection[Strings.toString(msg.sender) + Strings.toString(_tokenId)];
         require(_ownerOf[nftfiId] != address(0), "Protection does not exist");
+
         /// liquidate nft with a dutch auction through seaport
+
         liquidationStatus[nftfiId] = true;
         return ERC721TokenReceiver.onERC721Received.selector;
     }
