@@ -13,6 +13,19 @@ error CollateralNotLiquidated();
 
 interface NFTfi {
     function loanRepaidOrLiquidated(uint32) external view returns (bool);
+    function loanIdToLoan(uint32) external view returns (
+        uint256,
+        uint256,
+        uint256,
+        address,
+        uint32,
+        uint16,
+        uint16,
+        address,
+        uint64,
+        address,
+        address
+    );
 }
 
 /**
@@ -29,8 +42,9 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
     mapping(uint32 => uint256) private stake;
     mapping(uint32 => uint32) private lowerBound;
     mapping(uint32 => uint32) private upperBound;
-    mapping(uint32 => uint256) private liquidation;
+    mapping(uint32 => uint256) private liquidationValue;
     mapping(uint32 => bool) private liquidationStatus;
+    mapping(string => uint32) private collateralToProtection;
 
     constructor(address nftfi) ERC721("Gradient Protection", "PROTECTION") {
         payee = msg.sender;
@@ -48,6 +62,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
         stake[nftfiId] = msg.value;
         lowerBound[nftfiId] = lowerBoundvalue;
         upperBound[nftfiId] = upperBoundvalue;
+        collateralToProtection[Strings.toString(loanIdToLoan[nftfiId].nftCollateralContract) + Strings.toString(loanIdToLoan[nftfiId].nftCollateralId)] = nftfiId;
     }
 
     /**
@@ -87,7 +102,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
         require(_ownerOf[nftfiId] != address(0), "Protection does not exist");
 
         /// Closes a expired protection when the borrower payed back or when the lender wants to keep the collateral
-        if (NFTfi(nftfiAddress).loanRepaidOrLiquidated(nftfiId) && liquidation[nftfiId] == 0 && !liquidationStatus[nftfiId]) {
+        if (NFTfi(nftfiAddress).loanRepaidOrLiquidated(nftfiId) && liquidationValue[nftfiId] == 0 && !liquidationStatus[nftfiId]) {
             _burn(nftfiId);
             (bool transferTx, ) = payee.call{value: stake[nftfiId]}("");
             if (!transferTx) {
@@ -96,12 +111,12 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
             stake[nftfiId] = 0;
         }
         /// Closes a protection after the collateral has been liquidated by covering any losses
-        else if  (NFTfi(nftfiAddress).loanRepaidOrLiquidated(nftfiId) && liquidation[nftfiId] > 0 && liquidationStatus[nftfiId]) {
+        else if  (NFTfi(nftfiAddress).loanRepaidOrLiquidated(nftfiId) && liquidationValue[nftfiId] > 0 && liquidationStatus[nftfiId]) {
             /// Option A: The collateral is liquidated at a price above the upper-bound of the protection 
-            if (liquidation[nftfiId] > upperBound[nftfiId]) {
+            if (liquidationValue[nftfiId] > upperBound[nftfiId]) {
                 _burn(nftfiId);
                 /// Return all $ from the liquidation to protection owner
-                (bool transferTx1, ) = _ownerOf[nftfiId].call{value: liquidation[nftfiId]}("");
+                (bool transferTx1, ) = _ownerOf[nftfiId].call{value: liquidationValue[nftfiId]}("");
                 if (!transferTx1) {
                     revert WithdrawTransfer();
                 }
@@ -113,12 +128,12 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
                 stake[nftfiId] = 0;
             }
             /// Option B: The collateral is liquidated at a price between the bounds of the protection
-            else if (lowerBound[nftfiId] < liquidation[nftfiId] && liquidation[nftfiId] < upperBound[nftfiId]) {
+            else if (lowerBound[nftfiId] < liquidationValue[nftfiId] && liquidationValue[nftfiId] < upperBound[nftfiId]) {
                 _burn(nftfiId);
-                uint256 losses = upperBound[nftfiId] - liquidation[nftfiId];
+                uint256 losses = upperBound[nftfiId] - liquidationValue[nftfiId];
                 stake[nftfiId] - losses;
                 /// Return all $ from the liquidation to protection owner and cover lossses
-                (bool transferTx1, ) = _ownerOf[nftfiId].call{value: liquidation[nftfiId] + losses}("");
+                (bool transferTx1, ) = _ownerOf[nftfiId].call{value: liquidationValue[nftfiId] + losses}("");
                 if (!transferTx1) {
                     revert WithdrawTransfer();
                 }
@@ -129,10 +144,10 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
                 }
             }
             /// Option C: The collateral is liquidated at a price below the lower-bound of the protection
-            else if (liquidation[nftfiId] < lowerBound[nftfiId]) {
+            else if (liquidationValue[nftfiId] < lowerBound[nftfiId]) {
                 _burn(nftfiId);
                 /// Return all $ from the liquidation and protection to protection owner
-                (bool transferTx, ) = _ownerOf[nftfiId].call{value: liquidation[nftfiId] + stake[nftfiId]}("");
+                (bool transferTx, ) = _ownerOf[nftfiId].call{value: liquidationValue[nftfiId] + stake[nftfiId]}("");
                 if (!transferTx) {
                     revert WithdrawTransfer();
                 }
@@ -152,12 +167,15 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
     * @dev Liquidation executed by the lender when the borrower defaults and the lender wants to cover any losses.
     **/
     function onERC721Received(
-        address,
-        address,
-        uint256,
+        address _operator,
+        address _from,
+        uint256 _tokenId,
         bytes calldata
     ) external override virtual returns (bytes4) {
+        uint32 nftfiId = collateralToProtection[Strings.toString(msg.sender) + Strings.toString(_tokenId)];
+        require(_ownerOf[nftfiId] != address(0), "Protection does not exist");
         /// liquidate nft with a dutch auction through seaport
+        liquidationStatus[nftfiId] = true;
         return ERC721TokenReceiver.onERC721Received.selector;
     }
 }
