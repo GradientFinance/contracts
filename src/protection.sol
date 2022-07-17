@@ -2,6 +2,7 @@
 pragma solidity 0.8.15;
 
 import "solmate/tokens/ERC721.sol";
+import "solmate/utils/ReentrancyGuard.sol";
 import "openzeppelin-contracts/contracts/utils/Strings.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
 
@@ -19,7 +20,7 @@ interface NFTfi {
  * @author @cairoeth
  * @dev ERC721 contract from which NFTs are minted to represent loan protection.
  **/
-contract Insurance is ERC721, Ownable, ERC721TokenReceiver {
+contract Insurance is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
     using Strings for uint256;
     string public baseURI = "";
     address payee;
@@ -39,7 +40,7 @@ contract Insurance is ERC721, Ownable, ERC721TokenReceiver {
     * @param recipient is the receiver address of the loan
     * @param nftfiId is the id of the NFTfi Promissory Note
     **/
-    function mintProtection(address recipient, uint32 nftfiId, uint256 lowerBoundvalue, uint256 upperBoundvalue) public payable onlyOwner {
+    function _mintProtection(address recipient, uint32 nftfiId, uint256 lowerBoundvalue, uint256 upperBoundvalue) public payable onlyOwner {
         /// msg.value value is amount of funds staked to cover the protection in case of default
         _safeMint(recipient, nftfiId);
         stake[nftfiId] = msg.value;
@@ -79,7 +80,7 @@ contract Insurance is ERC721, Ownable, ERC721TokenReceiver {
     * @dev Burns ERC721 token and returns stake when borrower pays back the loan.
     * @param nftfiId is the id of the NFTfi Promissory Note/protection NFT 
     **/
-    function borrowerPayed(uint32 nftfiId) external onlyOwner {
+    function _borrowerPayed(uint32 nftfiId) external nonReentrant {
         if (NFTfi(nftfiAddress).loanRepaidOrLiquidated(nftfiId)) {
             _burn(nftfiId);
             (bool transferTx, ) = payee.call{value: stake[nftfiId]}("");
@@ -109,7 +110,7 @@ contract Insurance is ERC721, Ownable, ERC721TokenReceiver {
     * @param liquidation is the $ earned from the collateral dutch auction
     * @param nftfiId is the id of the NFTfi Promissory Note/protection NFT
     **/
-    function coverLosses(uint256 liquidation, uint32 nftfiId) external onlyOwner {
+    function _coverLosses(uint256 liquidation, uint32 nftfiId) external nonReentrant {
         /// Check if nftfiId is burned or not
         require(_ownerOf[nftfiId] != address(0x0));
 
