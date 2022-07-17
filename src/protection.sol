@@ -16,11 +16,11 @@ interface NFTfi {
 }
 
 /**
- * @title Gradient Insurance (v0.1) contract
+ * @title Gradient Protection (v0.1) contract
  * @author @cairoeth
  * @dev ERC721 contract from which NFTs are minted to represent loan protection.
  **/
-contract Insurance is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
+contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
     using Strings for uint256;
     string public baseURI = "";
     address payee;
@@ -30,7 +30,7 @@ contract Insurance is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
     mapping(uint256 => uint256) private lowerBound;
     mapping(uint256 => uint256) private upperBound;
 
-    constructor(address nftfi) ERC721("Gradient Insurance", "INSURANCE") {
+    constructor(address nftfi) ERC721("Gradient Protection", "PROTECTION") {
         payee = msg.sender;
         nftfiAddress = nftfi;
     }
