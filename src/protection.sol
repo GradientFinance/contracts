@@ -41,7 +41,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, He
 
     NFTfi NFTfiContract = NFTfi(nftfiAddress);
 
-    mapping(uint32 => uint256) private stake;
+    mapping(uint32 => uint256) public stake;
     mapping(uint32 => uint256) private expiry;
     mapping(uint32 => uint32) private lowerBound;
     mapping(uint32 => uint32) private upperBound;
