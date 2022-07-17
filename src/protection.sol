@@ -12,7 +12,7 @@ import {
     Side
 } from "./ConsiderationEnums.sol";
 
-import {OrderParameters, Order} from "./ConsiderationStructs.sol";
+import {OrderParameters, Order, OfferItem, ConsiderationItem} from "./ConsiderationStructs.sol";
 
 error NonExistentTokenURI();
 error WithdrawTransfer();
@@ -46,6 +46,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
     string public baseURI = "";
     address payee;
     address nftfiAddress;
+    uint256 internal globalSalt;
 
     NFTfi NFTfiContract = NFTfi(nftfiAddress);
 
@@ -55,6 +56,12 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
     mapping(uint32 => uint256) private liquidationValue;
     mapping(uint32 => bool) private liquidationStatus;
     mapping(string => uint32) private collateralToProtection;
+
+    // Declaring Seaport structure objects
+    OfferItem[] _offerItem;
+    ConsiderationItem[] _considerationItem;
+    OrderParameters _orderParameters;
+    Order _order;
 
     constructor(address nftfi) ERC721("Gradient Protection", "PROTECTION") {
         payee = msg.sender;
@@ -205,6 +212,77 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
         require(_ownerOf[nftfiId] != address(0), "Protection does not exist");
 
         /// liquidate nft with a dutch auction through seaport
+
+        /**
+         *   ========= OfferItem ==========
+         *   ItemType itemType;
+         *   address token;
+         *   uint256 identifierOrCriteria;
+         *   uint256 startAmount;
+         *   uint256 endAmount;
+         */
+        _offerItem = OfferItem(
+            ItemType.ERC721, 
+            msg.sender, 
+            _tokenId, 
+            1, 
+            1
+        );
+
+        /**
+         *   ========= ConsiderationItem ==========
+         *   ItemType itemType;
+         *   address token;
+         *   uint256 identifierOrCriteria;
+         *   uint256 startAmount;
+         *   uint256 endAmount;
+         *   address payable recipient;
+         */
+        _considerationItem = ConsiderationItem(
+            ItemType.NATIVE,
+            address(0),
+            0,
+            150000000000000000000,
+            0,
+            payable(address(this))
+        );
+
+        /**
+         *   ========= OrderParameters ==========
+         *   address offerer;
+         *   address zone;
+         *   struct OfferItem[] offer;
+         *   struct ConsiderationItem[] consideration;
+         *   enum OrderType orderType;
+         *   uint256 startTime;
+         *   uint256 endTime;
+         *   bytes32 zoneHash;
+         *   uint256 salt;
+         *   bytes32 conduitKey;
+         *   uint256 totalOriginalConsiderationItems;
+         */
+        _orderParameters = OrderParameters(
+            address(this), 
+            address(0),
+            _offerItem,
+            _considerationItem,
+            OrderType.FULL_RESTRICTED,
+            block.timestamp,
+            block.timestamp + 1 days,
+            bytes32(0),
+            globalSalt++,
+            bytes32(0),
+            1
+        );
+
+        // EIP 1271 Signature
+
+        /**
+         *   ========= Order ==========
+         *   struct OrderParameters parameters;
+         *   bytes signature;
+         */
+        // _order = Order(_orderParameters);
 
         liquidationStatus[nftfiId] = true;
         return ERC721TokenReceiver.onERC721Received.selector;
