@@ -9,6 +9,7 @@ import "openzeppelin-contracts/contracts/access/Ownable.sol";
 error NonExistentTokenURI();
 error WithdrawTransfer();
 error ProtectionNotExpired();
+error CollateralNotLiquidated();
 
 interface NFTfi {
     function loanRepaidOrLiquidated(uint32) external view returns (bool);
@@ -29,6 +30,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
     mapping(uint32 => uint32) private lowerBound;
     mapping(uint32 => uint32) private upperBound;
     mapping(uint32 => uint256) private liquidation;
+    mapping(uint32 => bool) private liquidationStatus;
 
     constructor(address nftfi) ERC721("Gradient Protection", "PROTECTION") {
         payee = msg.sender;
@@ -85,7 +87,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
         require(_ownerOf[nftfiId] != address(0), "Protection does not exist");
 
         /// Closes a expired protection when the borrower payed back or when the lender wants to keep the collateral
-        if (NFTfi(nftfiAddress).loanRepaidOrLiquidated(nftfiId) && liquidation[nftfiId] == 0) {
+        if (NFTfi(nftfiAddress).loanRepaidOrLiquidated(nftfiId) && liquidation[nftfiId] == 0 && !liquidationStatus[nftfiId]) {
             _burn(nftfiId);
             (bool transferTx, ) = payee.call{value: stake[nftfiId]}("");
             if (!transferTx) {
@@ -94,7 +96,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
             stake[nftfiId] = 0;
         }
         /// Closes a protection after the collateral has been liquidated by covering any losses
-        else if  (NFTfi(nftfiAddress).loanRepaidOrLiquidated(nftfiId) && liquidation[nftfiId] > 0) {
+        else if  (NFTfi(nftfiAddress).loanRepaidOrLiquidated(nftfiId) && liquidation[nftfiId] > 0 && liquidationStatus[nftfiId]) {
             /// Option A: The collateral is liquidated at a price above the upper-bound of the protection 
             if (liquidation[nftfiId] > upperBound[nftfiId]) {
                 _burn(nftfiId);
@@ -136,9 +138,13 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver {
                 }
                 stake[nftfiId] = 0;
             }
+            /// Collateral liquidation is activate and but not sold yet
+            else if (NFTfi(nftfiAddress).loanRepaidOrLiquidated(nftfiId) && liquidationStatus[nftfiId]) {
+                revert CollateralNotLiquidated();
+            }
         }
         else {
-            revert();
+            revert ProtectionNotExpired();
         }
     }
 
