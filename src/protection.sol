@@ -43,14 +43,13 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, AP
 
     mapping(uint32 => uint256) public stake;
     mapping(uint32 => uint256) private expiry;
-    mapping(uint32 => uint32) private lowerBound;
-    mapping(uint32 => uint32) private upperBound;
+    mapping(uint32 => uint256) private lowerBound;
+    mapping(uint32 => uint256) private upperBound;
     mapping(uint32 => address) private collateralContractToProtection;
     mapping(uint32 => uint256) private collateralIdToProtection;
 
-    constructor(address nftfi) ERC721("Gradient Protection", "PROTECTION") {
+    constructor() ERC721("Gradient Protection", "PROTECTION") {
         payee = msg.sender;
-        nftfiAddress = nftfi;
     }
 
     /**
@@ -58,7 +57,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, AP
     * @param recipient is the receiver address of the protection (lender)
     * @param nftfiId is the id of the NFTfi Promissory Note
     **/
-    function _mintProtection(address recipient, uint32 nftfiId, uint32 lowerBoundvalue, uint32 upperBoundvalue, uint256 expiryUnix, address collateralContract, uint256 collateralId) public payable onlyOwner {
+    function _mintProtection(address recipient, uint32 nftfiId, uint256 lowerBoundvalue, uint256 upperBoundvalue, uint256 expiryUnix, address collateralContract, uint256 collateralId) public payable onlyOwner {
         /// msg.value value is amount of funds staked to cover the protection in case of default
         _safeMint(recipient, nftfiId);
         stake[nftfiId] = msg.value;
