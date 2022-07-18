@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.7;
+pragma solidity ^0.8.15;
 
-import 'chainlin/contracts/src/v0.8/ChainlinkClient.sol';
-import 'chainlin/contracts/src/v0.8/ConfirmedOwner.sol';
+import 'chainlink/contracts/src/v0.8/ChainlinkClient.sol';
+import "openzeppelin-contracts/contracts/access/Ownable.sol";
+import "openzeppelin-contracts/contracts/utils/Strings.sol";
+import './helpers.sol';
 
 /**
  * Request testnet LINK and ETH here: https://faucets.chain.link/
@@ -13,10 +15,13 @@ import 'chainlin/contracts/src/v0.8/ConfirmedOwner.sol';
  * THIS IS AN EXAMPLE CONTRACT WHICH USES HARDCODED VALUES FOR CLARITY.
  * PLEASE DO NOT USE THIS CODE IN PRODUCTION.
  */
-contract APIConsumer is ChainlinkClient, ConfirmedOwner {
+contract APIConsumer is ChainlinkClient, Ownable, Helpers {
+    using Strings for uint256;
     using Chainlink for Chainlink.Request;
 
-    mapping(uint32 => mapping(uint32 => uint256))  public price;
+    mapping(address => mapping(uint256 => uint256)) public price;
+    mapping(bytes32 => address) internal requestToAddress;
+    mapping(bytes32 => uint256) internal requestToId;
     bytes32 private jobId;
     uint256 private fee;
 
@@ -31,7 +36,7 @@ contract APIConsumer is ChainlinkClient, ConfirmedOwner {
      * jobId: ca98366cc7314957b8c012c72f05aeeb
      *
      */
-    constructor() ConfirmedOwner(msg.sender) {
+    constructor() {
         setChainlinkToken(0x01BE23585060835E02B77ef475b0Cc51aA1e0709);
         setChainlinkOracle(0xf3FBB7f3391F62C8fe53f89B41dFC8159EE9653f);
         jobId = 'ca98366cc7314957b8c012c72f05aeeb';
@@ -42,13 +47,13 @@ contract APIConsumer is ChainlinkClient, ConfirmedOwner {
      * Create a Chainlink request to retrieve API response, find the target
      * data, then multiply by 1000000000000000000 (to remove decimal places from data).
      */
-    function RequestPrice(address contractAddress, uint256 tokenId) public returns (bytes32 requestId) {
+    function _RequestPrice(address contractAddress, uint256 tokenId) public {
         Chainlink.Request memory req = buildChainlinkRequest(jobId, address(this), this.fulfill.selector);
 
         // Set the URL to perform the GET request on
-        string s = string.concat('http://disestevez.pythonanywhere.com/', string(contractAddress));
+        string memory s = string.concat('http://disestevez.pythonanywhere.com/', _toAsciiString(contractAddress));
         s = string.concat(s, "/");
-        s = string.concat(s, string(tokenId));
+        s = string.concat(s, Strings.toString(tokenId));
         req.add('get', s);
 
         req.add('path', 'price'); // Chainlink nodes 1.0.0 and later support this format
@@ -58,7 +63,9 @@ contract APIConsumer is ChainlinkClient, ConfirmedOwner {
         req.addInt('times', timesAmount);
 
         // Sends the request
-        return sendChainlinkRequest(req, fee);
+        bytes32 sendRequest = sendChainlinkRequest(req, fee);
+        requestToAddress[sendRequest] = contractAddress;
+        requestToId[sendRequest] = tokenId;
     }
 
     /**
@@ -66,7 +73,7 @@ contract APIConsumer is ChainlinkClient, ConfirmedOwner {
      */
     function fulfill(bytes32 _requestId, uint256 _price) public recordChainlinkFulfillment(_requestId) {
         emit RequestPrice(_requestId, _price);
-        price = _price;
+        price[requestToAddress[_requestId]][requestToId[_requestId]] = _price;
     }
 
     /**

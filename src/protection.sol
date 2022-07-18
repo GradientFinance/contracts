@@ -5,7 +5,6 @@ import "solmate/tokens/ERC721.sol";
 import "solmate/utils/ReentrancyGuard.sol";
 import "openzeppelin-contracts/contracts/utils/Strings.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
-import "./helpers.sol";
 import "./APIConsumer.sol";
 
 error NonExistentTokenURI();
@@ -34,7 +33,7 @@ interface NFTfi {
  * @author @cairoeth
  * @dev ERC721 contract from which NFTs are minted to represent loan protection.
  **/
-contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, Helpers {
+contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, APIConsumer {
     using Strings for uint256;
     string public baseURI = "";
     address payee;
@@ -98,17 +97,18 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, He
        nftfiAddress = _address;
     }
 
-    // makes the call to the chainlink oracle. its a different function bc it may take some seconds for the value to become updated
-    function _fetchLiquidationValue(address contractAddress, tokenId) internal returns () {
-        APIConsumer.RequestPrice(contractAddress, tokenId);
+    /**
+    * @dev Makes the call to the chainlink oracle. its a different function bc it may take some seconds for the value to become updated
+    **/
+    function _fetchLiquidationValue(uint32 nftfiId) internal {
+        _RequestPrice(collateralContractToProtection[nftfiId], collateralIdToProtection[nftfiId]);
     }
 
     /**
     * @dev Fetches the liquidation value of a loan protection collatereal
     **/
-    function _liquidationValue() internal returns (uint256) {
-        // gotta add the parameters, etc.
-        return APIConsumer.price;
+    function _liquidationValue(uint32 nftfiId) internal view returns (uint256) {
+        return price[collateralContractToProtection[nftfiId]][collateralIdToProtection[nftfiId]];
     }
 
     /**
@@ -118,6 +118,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, He
     function _triggerProtection(uint32 nftfiId) external nonReentrant {
         /// Require NFT protection not to be burned
         require(_ownerOf[nftfiId] != address(0), "Protection does not exist");
+        _fetchLiquidationValue(nftfiId);
         uint256 liquidationFunds = _liquidationValue(nftfiId);
 
         /// Closes a expired protection when the borrower payed back or when the lender wants to keep the collateral
