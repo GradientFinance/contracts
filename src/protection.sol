@@ -6,6 +6,7 @@ import "solmate/utils/ReentrancyGuard.sol";
 import "openzeppelin-contracts/contracts/utils/Strings.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import "./helpers.sol";
+import "./APIConsumer.sol";
 
 error NonExistentTokenURI();
 error WithdrawTransfer();
@@ -97,18 +98,17 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, He
        nftfiAddress = _address;
     }
 
+    // makes the call to the chainlink oracle. its a different function bc it may take some seconds for the value to become updated
+    function _fetchLiquidationValue(address contractAddress, tokenId) internal returns () {
+        APIConsumer.RequestPrice(contractAddress, tokenId);
+    }
+
     /**
     * @dev Fetches the liquidation value of a loan protection collatereal
-    * @param nftfiId is the id of the NFTfi Promissory Note/protection NFT
     **/
-    function _liquidationValue(uint32 nftfiId) internal returns (uint256) {
-        /// TODO: Integrate OpenSea API to check the liquidation value (liquidationValue)
-        // collateralContractToProtection[nftfiId] --> contract address of the loan collateral
-        // collateralIdToProtection[nftfiId] --> token id of the loan collateral
-        // nftfiId is the same id for the NFTfi promissory note
-        // function must return a uint256 value which represents the eth amount of the liquidation in the smallest unit (wei)
-        // use helper functions to transform any address to string for easier API processing
-        return 0;
+    function _liquidationValue() internal returns (uint256) {
+        // gotta add the parameters, etc.
+        return APIConsumer.price;
     }
 
     /**
