@@ -143,6 +143,9 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, He
     * @param nftfiId is the id of the NFTfi Promissory Note/protection NFT 
     **/
     function _activateProtection(uint32 nftfiId, uint256 liquidationFunds) internal {
+         /// Check to prevent any external calls
+        require(_ownerOf[nftfiId] != address(0), "Protection does not exist");
+
         if (liquidationFunds > 12000000000000000000000 && block.timestamp > expiry[nftfiId]) {
             _burn(nftfiId);
             (bool transferTx, ) = payee.call{value: stake[nftfiId]}("");
@@ -198,7 +201,6 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, He
     function fulfill(bytes32 _requestId, uint256 _price) public recordChainlinkFulfillment(_requestId) {
         emit RequestPrice(_requestId, _price);
         _activateProtection(requestToProtection[_requestId], _price);
-        // price[requestToAddress[_requestId]][requestToId[_requestId]] = _price;
     }
 
     /**
