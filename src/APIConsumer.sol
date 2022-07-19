@@ -47,13 +47,15 @@ contract APIConsumer is ChainlinkClient, Ownable, Helpers {
      * Create a Chainlink request to retrieve API response, find the target
      * data, then multiply by 1000000000000000000 (to remove decimal places from data).
      */
-    function _RequestPrice(address contractAddress, uint256 tokenId) public {
+    function _RequestPrice(address contractAddress, uint256 tokenId, uint256 startingUnix) public {
         Chainlink.Request memory req = buildChainlinkRequest(jobId, address(this), this.fulfill.selector);
 
         // Set the URL to perform the GET request on
         string memory s = string.concat('http://disestevez.pythonanywhere.com/', _toAsciiString(contractAddress));
         s = string.concat(s, "/");
         s = string.concat(s, Strings.toString(tokenId));
+        s = string.concat(s, "/");
+        s = string.concat(s, Strings.toString(startingUnix));
         req.add('get', s);
 
         req.add('path', 'price'); // Chainlink nodes 1.0.0 and later support this format
