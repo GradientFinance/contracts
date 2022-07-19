@@ -11,21 +11,8 @@ error NonExistentTokenURI();
 error WithdrawTransfer();
 error ProtectionStillActive();
 
-interface NFTfi {
+interface IDirectLoanBase {
     function loanRepaidOrLiquidated(uint32) external view returns (bool);
-    function loanIdToLoan(uint32) external returns (
-        uint256 loanPrincipalAmount,
-        uint256 maximumRepaymentAmount,
-        uint256 nftCollateralId,
-        address loanERC20Denomination,
-        uint32 loanDuration,
-        uint16 loanInterestRateForDurationInBasisPoints,
-        uint16 loanAdminFeeInBasisPoints,
-        address nftCollateralWrapper,
-        uint64 loanStartTime,
-        address nftCollateralContract,
-        address borrower
-    );
 }
 
 /**
@@ -38,8 +25,6 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, AP
     string public baseURI = "";
     address payee;
     address nftfiAddress;
-
-    NFTfi NFTfiContract = NFTfi(nftfiAddress);
 
     mapping(uint32 => uint256) public stake;
     mapping(uint32 => uint256) private expiry;
@@ -121,7 +106,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, AP
         require(_ownerOf[nftfiId] != address(0), "Protection does not exist");
 
         /// Closes a expired protection when the borrower payed back or when the lender wants to keep the collateral
-        if (NFTfiContract.loanRepaidOrLiquidated(nftfiId)) {
+        if (IDirectLoanBase(nftfiAddress).loanRepaidOrLiquidated(nftfiId)) {
             _fetchLiquidationValue(nftfiId);
             uint256 liquidationFunds = _liquidationValue(nftfiId);
 
