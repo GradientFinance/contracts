@@ -168,7 +168,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, He
             }
             /// Option B: The collateral is liquidated at a price between the bounds of the protection
             else if (lowerBound[nftfiId] < liquidationFunds && liquidationFunds < upperBound[nftfiId]) {
-                address payable receiverProtection = _ownerOf[nftfiId];
+                address receiverProtection = _ownerOf[nftfiId];
                 uint256 losses = upperBound[nftfiId] - liquidationFunds;
                 uint256 payback = stake[nftfiId] - losses;
                 _burn(nftfiId);
@@ -186,7 +186,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, He
             }
             /// Option C: The collateral is liquidated at a price below the lower-bound of the protection
             else if (liquidationFunds < lowerBound[nftfiId]) {
-                address payable receiverProtection = _ownerOf[nftfiId];
+                address receiverProtection = _ownerOf[nftfiId];
                 _burn(nftfiId);
                 /// Return all $ from the liquidation and protection to protection owner
                 (bool transferTx, ) = receiverProtection.call{value: stake[nftfiId]}("");
