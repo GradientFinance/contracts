@@ -5,7 +5,9 @@ import "solmate/tokens/ERC721.sol";
 import "solmate/utils/ReentrancyGuard.sol";
 import "openzeppelin-contracts/contracts/utils/Strings.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
-import "./APIConsumer.sol";
+import 'chainlink/contracts/src/v0.8/ChainlinkClient.sol';
+import './helpers.sol';
+
 
 error NonExistentTokenURI();
 error WithdrawTransfer();
@@ -20,11 +22,14 @@ interface IDirectLoanBase {
  * @author @cairoeth
  * @dev ERC721 contract from which NFTs are minted to represent loan protection.
  **/
-contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, APIConsumer {
+contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, Helpers, ChainlinkClient {
     using Strings for uint256;
+    using Chainlink for Chainlink.Request;
     string public baseURI = "";
     address payee;
     address nftfiAddress;
+    bytes32 private jobId;
+    uint256 private fee;
 
     mapping(uint32 => uint256) public stake;
     mapping(uint32 => uint256) private expiry;
@@ -33,9 +38,16 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, AP
     mapping(uint32 => address) private collateralContractToProtection;
     mapping(uint32 => uint256) private collateralIdToProtection;
     mapping(uint32 => uint256) private startingUnix;
+    mapping(bytes32 => uint32) internal requestToProtection;
+
+    event RequestPrice(bytes32 indexed requestId, uint256 price);
 
     constructor() ERC721("Gradient Protection", "PROTECTION") {
         payee = msg.sender;
+        setChainlinkToken(0x01BE23585060835E02B77ef475b0Cc51aA1e0709);
+        setChainlinkOracle(0xf3FBB7f3391F62C8fe53f89B41dFC8159EE9653f);
+        jobId = 'ca98366cc7314957b8c012c72f05aeeb';
+        fee = (1 * LINK_DIVISIBILITY) / 10; // 0,1 * 10**18 (Varies by network and job)
     }
 
     /**
@@ -84,17 +96,29 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, AP
     }
 
     /**
-    * @dev Makes the call to the chainlink oracle. its a different function bc it may take some seconds for the value to become updated
-    **/
-    function _fetchLiquidationValue(uint32 nftfiId) internal {
-        _RequestPrice(collateralContractToProtection[nftfiId], collateralIdToProtection[nftfiId], startingUnix[nftfiId]);
-    }
+     * Create a Chainlink request to retrieve API response, find the target
+     * data, then multiply by 1000000000000000000 (to remove decimal places from data).
+     */
+    function _RequestPrice(address contractAddress, uint256 tokenId, uint256 _startingUnix, uint32 protectionId) public {
+        Chainlink.Request memory req = buildChainlinkRequest(jobId, address(this), this.fulfill.selector);
 
-    /**
-    * @dev Fetches the liquidation value of a loan protection collatereal
-    **/
-    function _liquidationValue(uint32 nftfiId) internal view returns (uint256) {
-        return price[collateralContractToProtection[nftfiId]][collateralIdToProtection[nftfiId]];
+        // Set the URL to perform the GET request on
+        string memory s = string.concat('http://disestevez.pythonanywhere.com/', _toAsciiString(contractAddress));
+        s = string.concat(s, "/");
+        s = string.concat(s, Strings.toString(tokenId));
+        s = string.concat(s, "/");
+        s = string.concat(s, Strings.toString(_startingUnix));
+        req.add('get', s);
+
+        req.add('path', 'price'); // Chainlink nodes 1.0.0 and later support this format
+
+        // Multiply 1
+        int256 timesAmount = 1;
+        req.addInt('times', timesAmount);
+
+        // Sends the request
+        bytes32 sendRequest = sendChainlinkRequest(req, fee);
+        requestToProtection[sendRequest] = protectionId;
     }
 
     /**
@@ -107,59 +131,82 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, AP
 
         /// Closes a expired protection when the borrower payed back or when the lender wants to keep the collateral
         if (IDirectLoanBase(nftfiAddress).loanRepaidOrLiquidated(nftfiId)) {
-            _fetchLiquidationValue(nftfiId);
-            uint256 liquidationFunds = _liquidationValue(nftfiId);
-            
-            if (liquidationFunds > 12000000000000000000000 && block.timestamp > expiry[nftfiId]) {
-                _burn(nftfiId);
-                (bool transferTx, ) = payee.call{value: stake[nftfiId]}("");
-                if (!transferTx) {
-                    revert WithdrawTransfer();
-                }
-                stake[nftfiId] = 0;
-            }
-            /// Closes a protection after the collateral has been liquidated by covering any losses
-            else if (0 < liquidationFunds && liquidationFunds < 12000000000000000000000) {
-                /// Option A: The collateral is liquidated at a price above the upper-bound of the protection 
-                if (liquidationFunds > upperBound[nftfiId]) {
-                    _burn(nftfiId);
-                    /// Return stake
-                    (bool transferTx2, ) = payee.call{value: stake[nftfiId]}("");
-                    if (!transferTx2) {
-                        revert WithdrawTransfer();
-                    }
-                    stake[nftfiId] = 0;
-                }
-                /// Option B: The collateral is liquidated at a price between the bounds of the protection
-                else if (lowerBound[nftfiId] < liquidationFunds && liquidationFunds < upperBound[nftfiId]) {
-                    _burn(nftfiId);
-                    uint256 losses = upperBound[nftfiId] - liquidationFunds;
-                    stake[nftfiId] - losses;
-                    /// Return all $ from the liquidation to protection owner and cover lossses
-                    (bool transferTx1, ) = _ownerOf[nftfiId].call{value: losses}("");
-                    if (!transferTx1) {
-                        revert WithdrawTransfer();
-                    }
-                    /// Return remaining stake, if any.
-                    (bool transferTx2, ) = payee.call{value: stake[nftfiId]}("");
-                    if (!transferTx2) {
-                        revert WithdrawTransfer();
-                    }
-                }
-                /// Option C: The collateral is liquidated at a price below the lower-bound of the protection
-                else if (liquidationFunds < lowerBound[nftfiId]) {
-                    _burn(nftfiId);
-                    /// Return all $ from the liquidation and protection to protection owner
-                    (bool transferTx, ) = _ownerOf[nftfiId].call{value: stake[nftfiId]}("");
-                    if (!transferTx) {
-                        revert WithdrawTransfer();
-                    }
-                    stake[nftfiId] = 0;
-                }
-            }
+            _RequestPrice(collateralContractToProtection[nftfiId], collateralIdToProtection[nftfiId], startingUnix[nftfiId], nftfiId);
         }
         else {
             revert ProtectionStillActive();
         }
     }
+
+    /**
+    * @notice Runs the protection using the data from OpenSea
+    * @param nftfiId is the id of the NFTfi Promissory Note/protection NFT 
+    **/
+    function _activateProtection(uint32 nftfiId, uint256 liquidationFunds) internal {
+        if (liquidationFunds > 12000000000000000000000 && block.timestamp > expiry[nftfiId]) {
+            _burn(nftfiId);
+            (bool transferTx, ) = payee.call{value: stake[nftfiId]}("");
+            if (!transferTx) {
+                revert WithdrawTransfer();
+            }
+            stake[nftfiId] = 0;
+        }
+        /// Closes a protection after the collateral has been liquidated by covering any losses
+        else if (0 < liquidationFunds && liquidationFunds < 12000000000000000000000) {
+            /// Option A: The collateral is liquidated at a price above the upper-bound of the protection 
+            if (liquidationFunds > upperBound[nftfiId]) {
+                _burn(nftfiId);
+                /// Return stake
+                (bool transferTx2, ) = payee.call{value: stake[nftfiId]}("");
+                if (!transferTx2) {
+                    revert WithdrawTransfer();
+                }
+                stake[nftfiId] = 0;
+            }
+            /// Option B: The collateral is liquidated at a price between the bounds of the protection
+            else if (lowerBound[nftfiId] < liquidationFunds && liquidationFunds < upperBound[nftfiId]) {
+                _burn(nftfiId);
+                uint256 losses = upperBound[nftfiId] - liquidationFunds;
+                stake[nftfiId] - losses;
+                /// Return all $ from the liquidation to protection owner and cover lossses
+                (bool transferTx1, ) = _ownerOf[nftfiId].call{value: losses}("");
+                if (!transferTx1) {
+                    revert WithdrawTransfer();
+                }
+                /// Return remaining stake, if any.
+                (bool transferTx2, ) = payee.call{value: stake[nftfiId]}("");
+                if (!transferTx2) {
+                    revert WithdrawTransfer();
+                }
+            }
+            /// Option C: The collateral is liquidated at a price below the lower-bound of the protection
+            else if (liquidationFunds < lowerBound[nftfiId]) {
+                _burn(nftfiId);
+                /// Return all $ from the liquidation and protection to protection owner
+                (bool transferTx, ) = _ownerOf[nftfiId].call{value: stake[nftfiId]}("");
+                if (!transferTx) {
+                    revert WithdrawTransfer();
+                }
+                stake[nftfiId] = 0;
+            }
+        }
+    }
+
+    /**
+     * Receive the response in the form of uint256
+     */
+    function fulfill(bytes32 _requestId, uint256 _price) public recordChainlinkFulfillment(_requestId) {
+        emit RequestPrice(_requestId, _price);
+        _activateProtection(requestToProtection[_requestId], _price);
+        // price[requestToAddress[_requestId]][requestToId[_requestId]] = _price;
+    }
+
+    /**
+     * Allow withdraw of Link tokens from the contract
+     */
+    function withdrawLink() public onlyOwner {
+        LinkTokenInterface link = LinkTokenInterface(chainlinkTokenAddress());
+        require(link.transfer(msg.sender, link.balanceOf(address(this))), 'Unable to transfer');
+    }
+
 }
