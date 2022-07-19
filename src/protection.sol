@@ -109,7 +109,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, AP
         if (IDirectLoanBase(nftfiAddress).loanRepaidOrLiquidated(nftfiId)) {
             _fetchLiquidationValue(nftfiId);
             uint256 liquidationFunds = _liquidationValue(nftfiId);
-
+            
             if (liquidationFunds > 12000000000000000000000 && block.timestamp > expiry[nftfiId]) {
                 _burn(nftfiId);
                 (bool transferTx, ) = payee.call{value: stake[nftfiId]}("");

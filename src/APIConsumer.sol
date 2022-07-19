@@ -60,10 +60,6 @@ contract APIConsumer is ChainlinkClient, Ownable, Helpers {
 
         req.add('path', 'price'); // Chainlink nodes 1.0.0 and later support this format
 
-        // Multiply the result by 1000000000000000000 to remove decimals
-        int256 timesAmount = 10**18;
-        req.addInt('times', timesAmount);
-
         // Sends the request
         bytes32 sendRequest = sendChainlinkRequest(req, fee);
         requestToAddress[sendRequest] = contractAddress;
