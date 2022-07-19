@@ -9,7 +9,7 @@ import "./APIConsumer.sol";
 
 error NonExistentTokenURI();
 error WithdrawTransfer();
-error ProtectionNotExpired();
+error ProtectionStillActive();
 
 interface NFTfi {
     function loanRepaidOrLiquidated(uint32) external view returns (bool);
@@ -117,64 +117,67 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, AP
     function _triggerProtection(uint32 nftfiId) external nonReentrant {
         /// Require NFT protection not to be burned
         require(_ownerOf[nftfiId] != address(0), "Protection does not exist");
-        _fetchLiquidationValue(nftfiId);
-        uint256 liquidationFunds = _liquidationValue(nftfiId);
 
         /// Closes a expired protection when the borrower payed back or when the lender wants to keep the collateral
-        if (NFTfiContract.loanRepaidOrLiquidated(nftfiId) && liquidationFunds == 0 && block.timestamp > expiry[nftfiId]) {
-            _burn(nftfiId);
-            (bool transferTx, ) = payee.call{value: stake[nftfiId]}("");
-            if (!transferTx) {
-                revert WithdrawTransfer();
-            }
-            stake[nftfiId] = 0;
-        }
-        /// Closes a protection after the collateral has been liquidated by covering any losses
-        else if  (NFTfiContract.loanRepaidOrLiquidated(nftfiId) && liquidationFunds > 0) {
-            /// Option A: The collateral is liquidated at a price above the upper-bound of the protection 
-            if (liquidationFunds > upperBound[nftfiId]) {
+        if (NFTfiContract.loanRepaidOrLiquidated(nftfiId)) {
+            _fetchLiquidationValue(nftfiId);
+            uint256 liquidationFunds = _liquidationValue(nftfiId);
+
+            if (liquidationFunds > 12000000000000000000000 && block.timestamp > expiry[nftfiId]) {
                 _burn(nftfiId);
-                /// Return all $ from the liquidation to protection owner
-                (bool transferTx1, ) = _ownerOf[nftfiId].call{value: liquidationFunds}("");
-                if (!transferTx1) {
-                    revert WithdrawTransfer();
-                }
-                /// Return stake
-                (bool transferTx2, ) = payee.call{value: stake[nftfiId]}("");
-                if (!transferTx2) {
-                    revert WithdrawTransfer();
-                }
-                stake[nftfiId] = 0;
-            }
-            /// Option B: The collateral is liquidated at a price between the bounds of the protection
-            else if (lowerBound[nftfiId] < liquidationFunds && liquidationFunds < upperBound[nftfiId]) {
-                _burn(nftfiId);
-                uint256 losses = upperBound[nftfiId] - liquidationFunds;
-                stake[nftfiId] - losses;
-                /// Return all $ from the liquidation to protection owner and cover lossses
-                (bool transferTx1, ) = _ownerOf[nftfiId].call{value: liquidationFunds + losses}("");
-                if (!transferTx1) {
-                    revert WithdrawTransfer();
-                }
-                /// Return remaining stake, if any.
-                (bool transferTx2, ) = payee.call{value: stake[nftfiId]}("");
-                if (!transferTx2) {
-                    revert WithdrawTransfer();
-                }
-            }
-            /// Option C: The collateral is liquidated at a price below the lower-bound of the protection
-            else if (liquidationFunds < lowerBound[nftfiId]) {
-                _burn(nftfiId);
-                /// Return all $ from the liquidation and protection to protection owner
-                (bool transferTx, ) = _ownerOf[nftfiId].call{value: liquidationFunds + stake[nftfiId]}("");
+                (bool transferTx, ) = payee.call{value: stake[nftfiId]}("");
                 if (!transferTx) {
                     revert WithdrawTransfer();
                 }
                 stake[nftfiId] = 0;
             }
+            /// Closes a protection after the collateral has been liquidated by covering any losses
+            else if (liquidationFunds > 0) {
+                /// Option A: The collateral is liquidated at a price above the upper-bound of the protection 
+                if (liquidationFunds > upperBound[nftfiId]) {
+                    _burn(nftfiId);
+                    /// Return all $ from the liquidation to protection owner
+                    (bool transferTx1, ) = _ownerOf[nftfiId].call{value: liquidationFunds}("");
+                    if (!transferTx1) {
+                        revert WithdrawTransfer();
+                    }
+                    /// Return stake
+                    (bool transferTx2, ) = payee.call{value: stake[nftfiId]}("");
+                    if (!transferTx2) {
+                        revert WithdrawTransfer();
+                    }
+                    stake[nftfiId] = 0;
+                }
+                /// Option B: The collateral is liquidated at a price between the bounds of the protection
+                else if (lowerBound[nftfiId] < liquidationFunds && liquidationFunds < upperBound[nftfiId]) {
+                    _burn(nftfiId);
+                    uint256 losses = upperBound[nftfiId] - liquidationFunds;
+                    stake[nftfiId] - losses;
+                    /// Return all $ from the liquidation to protection owner and cover lossses
+                    (bool transferTx1, ) = _ownerOf[nftfiId].call{value: liquidationFunds + losses}("");
+                    if (!transferTx1) {
+                        revert WithdrawTransfer();
+                    }
+                    /// Return remaining stake, if any.
+                    (bool transferTx2, ) = payee.call{value: stake[nftfiId]}("");
+                    if (!transferTx2) {
+                        revert WithdrawTransfer();
+                    }
+                }
+                /// Option C: The collateral is liquidated at a price below the lower-bound of the protection
+                else if (liquidationFunds < lowerBound[nftfiId]) {
+                    _burn(nftfiId);
+                    /// Return all $ from the liquidation and protection to protection owner
+                    (bool transferTx, ) = _ownerOf[nftfiId].call{value: liquidationFunds + stake[nftfiId]}("");
+                    if (!transferTx) {
+                        revert WithdrawTransfer();
+                    }
+                    stake[nftfiId] = 0;
+                }
+            }
         }
         else {
-            revert ProtectionNotExpired();
+            revert ProtectionStillActive();
         }
     }
 }
