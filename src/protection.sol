@@ -12,6 +12,7 @@ import './helpers.sol';
 error NonExistentTokenURI();
 error WithdrawTransfer();
 error ProtectionStillActive();
+error NoCase();
 
 interface IDirectLoanBase {
     function loanRepaidOrLiquidated(uint32) external view returns (bool);
@@ -131,7 +132,17 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, He
 
         /// Closes a expired protection when the borrower payed back or when the lender wants to keep the collateral
         if (IDirectLoanBase(nftfiAddress).loanRepaidOrLiquidated(nftfiId)) {
-            _RequestPrice(collateralContractToProtection[nftfiId], collateralIdToProtection[nftfiId], startingUnix[nftfiId], nftfiId);
+            if (block.timestamp > expiry[nftfiId]) {
+                _burn(nftfiId);
+                (bool transferTx, ) = payee.call{value: stake[nftfiId]}("");
+                if (!transferTx) {
+                    revert WithdrawTransfer();
+                }
+                stake[nftfiId] = 0;
+            }
+            else {
+                _RequestPrice(collateralContractToProtection[nftfiId], collateralIdToProtection[nftfiId], startingUnix[nftfiId], nftfiId);
+            }
         }
         else {
             revert ProtectionStillActive();
@@ -146,16 +157,8 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, He
          /// Check to prevent any external calls
         require(_ownerOf[nftfiId] != address(0), "Protection does not exist");
 
-        if (liquidationFunds > 12000000000000000000000 && block.timestamp > expiry[nftfiId]) {
-            _burn(nftfiId);
-            (bool transferTx, ) = payee.call{value: stake[nftfiId]}("");
-            if (!transferTx) {
-                revert WithdrawTransfer();
-            }
-            stake[nftfiId] = 0;
-        }
         /// Closes a protection after the collateral has been liquidated by covering any losses
-        else if (0 < liquidationFunds && liquidationFunds < 12000000000000000000000) {
+        if (0 < liquidationFunds && liquidationFunds < 12000000000000000000000) {
             /// Option A: The collateral is liquidated at a price above the upper-bound of the protection 
             if (liquidationFunds > upperBound[nftfiId]) {
                 _burn(nftfiId);
@@ -195,6 +198,9 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, He
                 }
                 stake[nftfiId] = 0;
             }
+        }
+        else {
+            revert NoCase();
         }
     }
 
