@@ -23,7 +23,7 @@ interface IDirectLoanBase {
  * @author @cairoeth
  * @dev ERC721 contract from which NFTs are minted to represent loan protection.
  **/
-contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, Helpers, ChainlinkClient {
+contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient {
     using Strings for uint256;
     using Chainlink for Chainlink.Request;
     string public baseURI = "";
@@ -100,7 +100,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, ERC721TokenReceiver, He
      * Create a Chainlink request to retrieve API response, find the target
      * data, then multiply by 1000000000000000000 (to remove decimal places from data).
      */
-    function _RequestPrice(address contractAddress, uint256 tokenId, uint256 _startingUnix, uint32 protectionId) public {
+    function _RequestPrice(address contractAddress, uint256 tokenId, uint256 _startingUnix, uint32 protectionId) internal {
         Chainlink.Request memory req = buildChainlinkRequest(jobId, address(this), this.fulfill.selector);
 
         // Set the URL to perform the GET request on
