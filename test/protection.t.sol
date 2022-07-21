@@ -7,6 +7,9 @@ import {stdStorage, StdStorage, Test} from "forge-std/Test.sol";
 import {Utils} from "./utils/Utils.sol";
 import {Protection} from "../src/protection.sol";
 
+import "./mocks/LinkToken.sol";
+import "./mocks/MockOracle.sol";
+
 /**
  * @title Gradient Protection (v0.1) unit tests
  * @author @cairoeth
