@@ -42,7 +42,6 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
 
     event RequestedPrice(bytes32 indexed requestId, uint256 price);
 
-
     /**
     * @notice Rinkeby parameters:
     * @param _ChainlinkToken 0x01BE23585060835E02B77ef475b0Cc51aA1e0709
