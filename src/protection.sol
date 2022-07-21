@@ -99,23 +99,19 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
     **/
     function triggerProtection(uint32 _nftfiId) external nonReentrant {
         require(_ownerOf[_nftfiId] != address(0), "Protection does not exist");
+        require(IDirectLoanBase(nftfiAddress).loanRepaidOrLiquidated(_nftfiId));
 
-        if (IDirectLoanBase(nftfiAddress).loanRepaidOrLiquidated(_nftfiId)) {
-            /// Closes a expired protection when the borrower payed back or when the lender wants to keep the collateral
-            if (block.timestamp > expiry[_nftfiId]) {
-                _burn(_nftfiId);
-                (bool transferTx, ) = payee.call{value: stake[_nftfiId]}("");
-                if (!transferTx) {
-                    revert WithdrawTransfer();
-                }
-                stake[_nftfiId] = 0;
+        /// Closes a expired protection when the borrower payed back or when the lender wants to keep the collateral
+        if (block.timestamp > expiry[_nftfiId]) {
+            _burn(_nftfiId);
+            (bool transferTx, ) = payee.call{value: stake[_nftfiId]}("");
+            if (!transferTx) {
+                revert WithdrawTransfer();
             }
-            else {
-                RequestPrice(collateralContractToProtection[_nftfiId], collateralIdToProtection[_nftfiId], startingUnix[_nftfiId], _nftfiId);
-            }
+            stake[_nftfiId] = 0;
         }
         else {
-            revert ProtectionStillActive();
+            RequestPrice(collateralContractToProtection[_nftfiId], collateralIdToProtection[_nftfiId], startingUnix[_nftfiId], _nftfiId);
         }
     }
 
