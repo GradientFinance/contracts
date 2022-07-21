@@ -42,12 +42,20 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
 
     event RequestedPrice(bytes32 indexed requestId, uint256 price);
 
-    constructor() ERC721("Gradient Protection", "PROTECTION") {
+
+    /**
+    * @notice Rinkeby parameters:
+    * @param _ChainlinkToken 0x01BE23585060835E02B77ef475b0Cc51aA1e0709
+    * @param _ChainlinkOracle 0xf3FBB7f3391F62C8fe53f89B41dFC8159EE9653f
+    * @param _jobId ca98366cc7314957b8c012c72f05aeeb
+    * @param _fee (1 * LINK_DIVISIBILITY) / 10
+    **/
+    constructor(address _ChainlinkToken, address _ChainlinkOracle, bytes32 _jobId, uint256 _fee) ERC721("Gradient Protection", "PROTECTION") {
         payee = msg.sender;
-        setChainlinkToken(0x01BE23585060835E02B77ef475b0Cc51aA1e0709);
-        setChainlinkOracle(0xf3FBB7f3391F62C8fe53f89B41dFC8159EE9653f);
-        jobId = 'ca98366cc7314957b8c012c72f05aeeb';
-        fee = (1 * LINK_DIVISIBILITY) / 10; /// 0,1 * 10**18 (Varies by network and job)
+        setChainlinkToken(_ChainlinkToken);
+        setChainlinkOracle(_ChainlinkOracle);
+        jobId = _jobId;
+        fee = _fee; /// 0,1 * 10**18 (Varies by network and job)
     }
 
     /**
@@ -125,7 +133,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
     function RequestPrice(address _contractAddress, uint256 _tokenId, uint256 _startingUnix, uint32 _nftfiId) internal {
         Chainlink.Request memory req = buildChainlinkRequest(jobId, address(this), this.fulfill.selector);
 
-        /// Set the URL to perform the GET request on
+        /// Set the URL to perform the GET request on -- will change!
         string memory s = string.concat('http://disestevez.pythonanywhere.com/', _toAsciiString(_contractAddress));
         s = string.concat(s, "/");
         s = string.concat(s, Strings.toString(_tokenId));
