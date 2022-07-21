@@ -18,7 +18,9 @@ contract BaseSetup is Protection, Test {
     address internal gradient;
     address internal lender;
 
-    Protection protection_contract;
+    Protection public protection_contract;
+    LinkToken public linkToken;
+    MockOracle public mockOracle;
 
     function setUp() public virtual {
         utils = new Utils();
@@ -31,6 +33,11 @@ contract BaseSetup is Protection, Test {
 
         vm.prank(gradient);
         protection_contract = new Protection();
+
+        linkToken = new LinkToken();
+        mockOracle = new MockOracle(address(linkToken));
+
+        linkToken.transfer(address(protection_contract), 100000000000000000000);
     }
 }
 
@@ -63,31 +70,32 @@ contract NFTfiAddress is BaseSetup {
     
 }
 
-contract ChainlinkSetup is BaseSetup {
-    address internal nftfi_address = 0x33e75763F3705252775C5AEEd92E5B4987622f44;
-
+contract TriggerProtetion is BaseSetup {
     function setUp() public virtual override {
         BaseSetup.setUp();
     }
 
-    function testNFTfiAddress() public {
+    function testRepayed() public {
         console.log(
             "Should establish the NFTfi address using the owner address"
         );
-
-        /// Ensure tx sender is owner
-        vm.prank(gradient);
-        protection_contract.setNFTfiAddress(nftfi_address);
     }
 
-    function testFailNFTfiAddress() public {
+    function testOptionA() public {
         console.log(
-            "Should not establish the NFTfi address as the sender is not owner"
+            "Should establish the NFTfi address using the owner address"
         );
-
-        /// Ensure tx sender is owner
-        vm.prank(address(0));
-        protection_contract.setNFTfiAddress(nftfi_address);
     }
-    
+
+    function testOptionB() public {
+        console.log(
+            "Should establish the NFTfi address using the owner address"
+        );
+    }
+
+    function testOptionC() public {
+        console.log(
+            "Should establish the NFTfi address using the owner address"
+        );
+    }
 }
