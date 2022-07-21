@@ -157,7 +157,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
         require(_ownerOf[_nftfiId] != address(0), "Protection does not exist");
 
         /// Closes a protection after the collateral has been liquidated by covering any losses
-        if (_liquidationFunds < 2**256 - 1) {
+        if (_liquidationFunds < 2**256 - 7) {
             /// Option A: The collateral is liquidated at a price above the upper-bound of the protection 
             if (_liquidationFunds > upperBound[_nftfiId]) {
                 _burn(_nftfiId);
