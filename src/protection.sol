@@ -29,7 +29,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
     uint256 private fee;
     address private nftfiAddress;
     address public payee;
-    string public baseURI = "";
+    string public baseURI;
 
     mapping(uint32 => uint256) private expiry;
     mapping(uint32 => uint256) private lowerBound;
@@ -47,14 +47,16 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
     * @param _ChainlinkToken 0x01BE23585060835E02B77ef475b0Cc51aA1e0709
     * @param _ChainlinkOracle 0xf3FBB7f3391F62C8fe53f89B41dFC8159EE9653f
     * @param _jobId ca98366cc7314957b8c012c72f05aeeb
-    * @param _fee (1 * LINK_DIVISIBILITY) / 10
+    * @param _fee (1 * LINK_DIVISIBILITY) / 10 /// 0,1 * 10**18 (Varies by network and job)
     **/
-    constructor(address _ChainlinkToken, address _ChainlinkOracle, bytes32 _jobId, uint256 _fee) ERC721("Gradient Protection", "PROTECTION") {
+    constructor(address _ChainlinkToken, address _ChainlinkOracle, bytes32 _jobId, uint256 _fee, string memory _URI, address _addressNFTfi) ERC721("Gradient Protection", "PROTECTION") {
         payee = msg.sender;
         setChainlinkToken(_ChainlinkToken);
         setChainlinkOracle(_ChainlinkOracle);
         jobId = _jobId;
-        fee = _fee; /// 0,1 * 10**18 (Varies by network and job)
+        fee = _fee;
+        baseURI = _URI;
+        nftfiAddress = _addressNFTfi;
     }
 
     /**
