@@ -9,6 +9,7 @@ import {Protection} from "../src/protection.sol";
 
 import "./mocks/LinkToken.sol";
 import "./mocks/MockOracle.sol";
+import "./mocks/MockNFTfi.sol";
 
 /**
  * @title Gradient Protection (v0.1) unit tests
@@ -20,10 +21,12 @@ contract BaseSetup is Protection, Test {
 
     address internal gradient;
     address internal lender;
+    address internal nftfi_address;
 
     Protection public protection_contract;
     LinkToken public linkToken;
     MockOracle public mockOracle;
+    IDirectLoanBase public nftcontract;
 
     function setUp() public virtual {
         utils = new Utils();
@@ -39,14 +42,14 @@ contract BaseSetup is Protection, Test {
 
         linkToken = new LinkToken();
         mockOracle = new MockOracle(address(linkToken));
+        nftcontract = new IDirectLoanBase();
 
         linkToken.transfer(address(protection_contract), 100000000000000000000);
+        nftfi_address = address(nftcontract);
     }
 }
 
 contract NFTfiAddress is BaseSetup {
-    address internal nftfi_address = 0x33e75763F3705252775C5AEEd92E5B4987622f44;
-
     function setUp() public virtual override {
         BaseSetup.setUp();
     }
@@ -73,32 +76,32 @@ contract NFTfiAddress is BaseSetup {
     
 }
 
-contract TriggerProtetion is BaseSetup {
+contract TriggerProtetionRepayed is BaseSetup {
     function setUp() public virtual override {
         BaseSetup.setUp();
+        vm.prank(gradient);
+        protection_contract.setNFTfiAddress(nftfi_address);
+
+        /// Ensure tx sender is owner
+        vm.prank(gradient);
+
+        /// Assuming collateral floor is 3 eth, hence testing with protection for 50% to 70%. Staking is 3 eth.
+        protection_contract.mintProtection{ value: 3000000000000000000 }(
+            lender,
+            9999,
+            1500000000000000000,
+            2100000000000000000,
+            1658243723,
+            0, /// Unix timestamp is 0 to trigger the block.timestamp check
+            0xf5de760f2e916647fd766B4AD9E85ff943cE3A2b,
+            1261495
+        );
     }
 
     function testRepayed() public {
         console.log(
-            "Should establish the NFTfi address using the owner address"
+            "Mint a protection to trigger the protection simulating the loan is repaid."
         );
-    }
-
-    function testOptionA() public {
-        console.log(
-            "Should establish the NFTfi address using the owner address"
-        );
-    }
-
-    function testOptionB() public {
-        console.log(
-            "Should establish the NFTfi address using the owner address"
-        );
-    }
-
-    function testOptionC() public {
-        console.log(
-            "Should establish the NFTfi address using the owner address"
-        );
+    
     }
 }
