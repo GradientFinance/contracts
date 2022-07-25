@@ -30,14 +30,18 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
     address private nftfiAddress;
     string public baseURI;
 
-    mapping(uint32 => uint256) private expiry;
-    mapping(uint32 => uint256) private lowerBound;
-    mapping(uint32 => uint256) private upperBound;
-    mapping(uint32 => address) private collateralContractToProtection;
-    mapping(uint32 => uint256) private collateralIdToProtection;
-    mapping(uint32 => uint256) private startingUnix;
+    struct LoanProtection {
+        uint256 stake;
+        uint256 lowerBound;
+        uint256 upperBound;
+        uint256 startingUnix;
+        uint256 expiryUnix;
+        uint256 collateralIdToProtection;
+        address collateralContractToProtection;
+    }
+
     mapping(bytes32 => uint32) private requestToProtection;
-    mapping(uint32 => uint256) public stake;
+    mapping(uint32 => LoanProtection) private protectionData;
 
     event RequestedPrice(bytes32 indexed requestId, uint256 price);
 
@@ -63,21 +67,24 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
     * @param _nftfiId ID of the NFTfi Promissory Note
     * @param _lowerBoundVal Lower boundary of the protection
     * @param _upperBoundVal Upper boundary of the protection
-    * @param _unixStart Unix timestamp when loan starts (NFTfi)
-    * @param _unixExpiry Unix timmestamp when loan expires (NFTfi)    
+    * @param _startingUnix Unix timestamp when loan starts (NFTfi)
+    * @param _expiryUnix Unix timmestamp when loan expires (NFTfi)    
     * @param _collateralContract Contract address of loan collateral
     * @param _collateralId Token ID of loan collateral    
     **/
-    function mintProtection(address _recipient, uint32 _nftfiId, uint256 _lowerBoundVal, uint256 _upperBoundVal, uint256 _unixStart, uint256 _unixExpiry, address _collateralContract, uint256 _collateralId) public payable onlyOwner {
+
+    function mintProtection(address _recipient, uint32 _nftfiId, uint256 _lowerBoundVal, uint256 _upperBoundVal, uint256 _startingUnix, uint256 _expiryUnix, address _collateralContract, uint256 _collateralId) public payable onlyOwner {
         /// msg.value value: amount of funds (wei) staked to cover losses of any collateral liquidation in case the borrower defaults
         _safeMint(_recipient, _nftfiId);
-        stake[_nftfiId] = msg.value;
-        lowerBound[_nftfiId] = _lowerBoundVal;
-        upperBound[_nftfiId] = _upperBoundVal;
-        startingUnix[_nftfiId] = _unixStart;
-        expiry[_nftfiId] = _unixExpiry + 1 days;
-        collateralContractToProtection[_nftfiId] = _collateralContract;
-        collateralIdToProtection[_nftfiId] = _collateralId;
+        protectionData[_nftfiId] = LoanProtection({
+            stake: msg.value,
+            lowerBound: _lowerBoundVal,
+            upperBound: _upperBoundVal,
+            startingUnix: _startingUnix,
+            expiryUnix: _expiryUnix + 1 days,
+            collateralIdToProtection: _collateralId,
+            collateralContractToProtection: _collateralContract
+        });
     }
 
     /**
@@ -107,9 +114,9 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
         require(IDirectLoanBase(nftfiAddress).loanRepaidOrLiquidated(_nftfiId));
 
         /// Closes a expired protection when the borrower payed back or when the lender wants to keep the collateral
-        if (block.timestamp > expiry[_nftfiId]) {
-            uint256 payback = stake[_nftfiId];
-            stake[_nftfiId] = 0;
+        if (block.timestamp > protectionData[_nftfiId].expiryUnix) {
+            uint256 payback = protectionData[_nftfiId].stake;
+            protectionData[_nftfiId].stake = 0;
             _burn(_nftfiId);
 
             /// Return stake
@@ -117,7 +124,11 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
             require(transferTx, "Payback transfer failed.");
         }
         else {
-            requestPrice(collateralContractToProtection[_nftfiId], collateralIdToProtection[_nftfiId], startingUnix[_nftfiId], _nftfiId);
+            requestPrice(
+                protectionData[_nftfiId].collateralContractToProtection,
+                protectionData[_nftfiId].collateralIdToProtection,
+                protectionData[_nftfiId].startingUnix,
+                _nftfiId);
         }
     }
 
@@ -159,11 +170,12 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
         require(_ownerOf[_nftfiId] != address(0), "Protection does not exist");
 
         /// Closes a protection after the collateral has been liquidated by covering any losses
+        /// The Oracle returns a higher value than 2**256 - 7 when a Dutch auction is not found
         if (_liquidationFunds < 2**256 - 7) {
             /// Option A: The collateral is liquidated at a price above the upper-bound of the protection 
-            if (_liquidationFunds > upperBound[_nftfiId]) {
-                uint256 payback = stake[_nftfiId];
-                stake[_nftfiId] = 0;
+            if (_liquidationFunds > protectionData[_nftfiId].upperBound) {
+                uint256 payback = protectionData[_nftfiId].stake;
+                protectionData[_nftfiId].stake = 0;
                 _burn(_nftfiId);
 
                 /// Return stake
@@ -171,11 +183,11 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
                 require(transferTx, "Payback transfer failed.");
             }
             /// Option B: The collateral is liquidated at a price between the bounds of the protection
-            else if (lowerBound[_nftfiId] < _liquidationFunds && _liquidationFunds < upperBound[_nftfiId]) {
+            else if (protectionData[_nftfiId].lowerBound < _liquidationFunds && _liquidationFunds < protectionData[_nftfiId].upperBound) {
                 address receiverProtection = _ownerOf[_nftfiId];
-                uint256 losses = upperBound[_nftfiId] - _liquidationFunds;
-                uint256 payback = stake[_nftfiId] - losses;
-                stake[_nftfiId] = 0;
+                uint256 losses = protectionData[_nftfiId].upperBound - _liquidationFunds;
+                uint256 payback = protectionData[_nftfiId].stake - losses;
+                protectionData[_nftfiId].stake = 0;
                 _burn(_nftfiId);
 
                 /// Return remaining stake, if any.
@@ -187,10 +199,10 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
                 require(transferTx2, "Protection transfer failed.");
             }
             /// Option C: The collateral is liquidated at a price below the lower-bound of the protection
-            else if (_liquidationFunds < lowerBound[_nftfiId]) {
+            else if (_liquidationFunds < protectionData[_nftfiId].lowerBound) {
                 address receiverProtection = _ownerOf[_nftfiId];
-                uint256 payback = stake[_nftfiId];
-                stake[_nftfiId] = 0;
+                uint256 payback = protectionData[_nftfiId].stake;
+                protectionData[_nftfiId].stake = 0;
                 _burn(_nftfiId);
 
                 /// Return all $ from the liquidation and protection to protection owner
