@@ -6,7 +6,7 @@ import "solmate/utils/ReentrancyGuard.sol";
 import "openzeppelin-contracts/contracts/utils/Strings.sol";
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import 'chainlink/contracts/src/v0.8/ChainlinkClient.sol';
-import './helpers.sol';
+import './Helpers.sol';
 
 error NonExistentTokenURI();
 error WithdrawTransfer();
@@ -28,7 +28,6 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
     bytes32 private jobId;
     uint256 private fee;
     address private nftfiAddress;
-    address public payee;
     string public baseURI;
 
     mapping(uint32 => uint256) private expiry;
@@ -50,7 +49,6 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
     * @param _fee (1 * LINK_DIVISIBILITY) / 10 /// 0,1 * 10**18 (Varies by network and job)
     **/
     constructor(address _ChainlinkToken, address _ChainlinkOracle, bytes32 _jobId, uint256 _fee, string memory _URI, address _addressNFTfi) ERC721("Gradient Protection", "PROTECTION") {
-        payee = msg.sender;
         setChainlinkToken(_ChainlinkToken);
         setChainlinkOracle(_ChainlinkOracle);
         jobId = _jobId;
@@ -93,9 +91,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
         override
         returns (string memory)
     {
-        if (ownerOf(tokenId) == address(0)) {
-            revert NonExistentTokenURI();
-        }
+        require(_ownerOf[tokenId] != address(0), "Non-existent token URI");
         return
             bytes(baseURI).length > 0
                 ? string(abi.encodePacked(baseURI, tokenId.toString()))
@@ -112,15 +108,16 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
 
         /// Closes a expired protection when the borrower payed back or when the lender wants to keep the collateral
         if (block.timestamp > expiry[_nftfiId]) {
-            _burn(_nftfiId);
-            (bool transferTx, ) = payee.call{value: stake[_nftfiId]}("");
-            if (!transferTx) {
-                revert WithdrawTransfer();
-            }
+            uint256 payback = stake[_nftfiId];
             stake[_nftfiId] = 0;
+            _burn(_nftfiId);
+
+            /// Return stake
+            (bool transferTx, ) = owner().call{value: payback}("");
+            require(transferTx, "Payback transfer failed.");
         }
         else {
-            RequestPrice(collateralContractToProtection[_nftfiId], collateralIdToProtection[_nftfiId], startingUnix[_nftfiId], _nftfiId);
+            requestPrice(collateralContractToProtection[_nftfiId], collateralIdToProtection[_nftfiId], startingUnix[_nftfiId], _nftfiId);
         }
     }
 
@@ -131,7 +128,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
     * @param _startingUnix Unix timestamp when loan starts (NFTfi)
     * @param _nftfiId Token ID of ERC721 protection 
     **/
-    function RequestPrice(address _contractAddress, uint256 _tokenId, uint256 _startingUnix, uint32 _nftfiId) internal {
+    function requestPrice(address _contractAddress, uint256 _tokenId, uint256 _startingUnix, uint32 _nftfiId) private {
         Chainlink.Request memory req = buildChainlinkRequest(jobId, address(this), this.fulfill.selector);
 
         /// Set the URL to perform the GET request on -- will change!
@@ -157,7 +154,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
     * @notice Runs the protection using the data from OpenSea
     * @param _nftfiId is the id of the NFTfi Promissory Note/protection NFT 
     **/
-    function activateProtection(uint32 _nftfiId, uint256 _liquidationFunds) internal {
+    function activateProtection(uint32 _nftfiId, uint256 _liquidationFunds) private {
          /// Check to prevent oracle manipulation by external calls 
         require(_ownerOf[_nftfiId] != address(0), "Protection does not exist");
 
@@ -165,42 +162,40 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
         if (_liquidationFunds < 2**256 - 7) {
             /// Option A: The collateral is liquidated at a price above the upper-bound of the protection 
             if (_liquidationFunds > upperBound[_nftfiId]) {
-                _burn(_nftfiId);
-                /// Return stake
-                (bool transferTx2, ) = payee.call{value: stake[_nftfiId]}("");
-                if (!transferTx2) {
-                    revert WithdrawTransfer();
-                }
+                uint256 payback = stake[_nftfiId];
                 stake[_nftfiId] = 0;
+                _burn(_nftfiId);
+
+                /// Return stake
+                (bool transferTx, ) = owner().call{value: payback}("");
+                require(transferTx, "Payback transfer failed.");
             }
             /// Option B: The collateral is liquidated at a price between the bounds of the protection
             else if (lowerBound[_nftfiId] < _liquidationFunds && _liquidationFunds < upperBound[_nftfiId]) {
                 address receiverProtection = _ownerOf[_nftfiId];
                 uint256 losses = upperBound[_nftfiId] - _liquidationFunds;
                 uint256 payback = stake[_nftfiId] - losses;
-                _burn(_nftfiId);
                 stake[_nftfiId] = 0;
+                _burn(_nftfiId);
+
                 /// Return remaining stake, if any.
-                (bool transferTx1, ) = payee.call{value: payback}("");
-                if (!transferTx1) {
-                    revert WithdrawTransfer();
-                }
+                (bool transferTx1, ) = owner().call{value: payback}("");
+                require(transferTx1, "Payback transfer failed.");
+
                 /// Return all $ from the liquidation to protection owner and cover lossses
                 (bool transferTx2, ) = receiverProtection.call{value: losses}("");
-                if (!transferTx2) {
-                    revert WithdrawTransfer();
-                }
+                require(transferTx2, "Protection transfer failed.");
             }
             /// Option C: The collateral is liquidated at a price below the lower-bound of the protection
             else if (_liquidationFunds < lowerBound[_nftfiId]) {
                 address receiverProtection = _ownerOf[_nftfiId];
-                _burn(_nftfiId);
-                /// Return all $ from the liquidation and protection to protection owner
-                (bool transferTx, ) = receiverProtection.call{value: stake[_nftfiId]}("");
-                if (!transferTx) {
-                    revert WithdrawTransfer();
-                }
+                uint256 payback = stake[_nftfiId];
                 stake[_nftfiId] = 0;
+                _burn(_nftfiId);
+
+                /// Return all $ from the liquidation and protection to protection owner
+                (bool transferTx, ) = receiverProtection.call{value: payback}("");
+                require(transferTx, "Protection transfer failed.");
             }
         }
         else {
@@ -231,6 +226,6 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
     **/
     function withdrawLink() public onlyOwner {
         LinkTokenInterface link = LinkTokenInterface(chainlinkTokenAddress());
-        require(link.transfer(msg.sender, link.balanceOf(address(this))), 'Unable to transfer');
+        require(link.transfer(owner(), link.balanceOf(address(this))), 'Unable to transfer');
     }
 }
