@@ -3,7 +3,7 @@ pragma solidity ^0.8.15;
 
 /**
  * @title Gradient Protection (v0.1) helpers
- * @author @cairoeth
+ * @author cairoeth
  * @dev Contract which contains helper functions for main contract.
  **/
 contract Helpers {
