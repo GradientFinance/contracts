@@ -19,7 +19,7 @@ interface IDirectLoanBase {
 
 /**
  * @title Gradient Protection (v0.1) contract
- * @author @cairoeth
+ * @author cairoeth
  * @dev ERC721 contract from which NFTs are minted to represent loan protection.
  **/
 contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient {
