@@ -49,7 +49,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
         setChainlinkToken(0x514910771AF9Ca656af840dff83E8264EcF986CA);
         setChainlinkOracle(0x188b71C9d27cDeE01B9b0dfF5C1aff62E8D6F434);
         baseURI = "https://app.gradient.city/metadata/";
-        nftfiAddress = 0x33e75763F3705252775C5AEEd92E5B4987622f44;
+        nftfiAddress = 0xf896527c49b44aAb3Cf22aE356Fa3AF8E331F280;
     }
 
     /**
