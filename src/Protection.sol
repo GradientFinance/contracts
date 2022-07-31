@@ -25,8 +25,8 @@ interface IDirectLoanBase {
 contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient {
     using Strings for uint256;
     using Chainlink for Chainlink.Request;
-    bytes32 private jobId;
-    uint256 private fee;
+    bytes32 private constant jobId = "9303ebb8365e472eb9a1505a3cc42317";
+    uint256 private constant fee = 4500000000000000000; /// 4.5 LINK
     address private nftfiAddress;
     string public baseURI;
 
@@ -46,10 +46,8 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
     event RequestedPrice(bytes32 indexed requestId, uint256 price);
 
     constructor() ERC721("Gradient Protection", "PROTECTION") {
-        setChainlinkToken(0x01BE23585060835E02B77ef475b0Cc51aA1e0709);
-        setChainlinkOracle(0xf3FBB7f3391F62C8fe53f89B41dFC8159EE9653f);
-        jobId = 'ca98366cc7314957b8c012c72f05aeeb';
-        fee = (1 * LINK_DIVISIBILITY) / 10;
+        setChainlinkToken(0x514910771AF9Ca656af840dff83E8264EcF986CA);
+        setChainlinkOracle(0x188b71C9d27cDeE01B9b0dfF5C1aff62E8D6F434);
         baseURI = "https://app.gradient.city/metadata/";
         nftfiAddress = 0x33e75763F3705252775C5AEEd92E5B4987622f44;
     }
@@ -132,7 +130,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
     * @param _nftfiId Token ID of ERC721 protection 
     **/
     function requestPrice(address _contractAddress, uint256 _tokenId, uint256 _startingUnix, uint32 _nftfiId) private {
-        Chainlink.Request memory req = buildChainlinkRequest(jobId, address(this), this.fulfill.selector);
+        Chainlink.Request memory req = buildChainlinkRequest(jobId, address(this), this.fulfillValue.selector);
 
         /// Set the URL to perform the GET request on -- will change!
         string memory s = string.concat('http://disestevez.pythonanywhere.com/', _toAsciiString(_contractAddress));
@@ -212,7 +210,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
     * @param _requestId Chainlink request ID
     * @param _price fetched price (wei)
     **/
-    function fulfill(bytes32 _requestId, uint256 _price) public recordChainlinkFulfillment(_requestId) {
+    function fulfillValue(bytes32 _requestId, uint256 _price) public recordChainlinkFulfillment(_requestId) {
         emit RequestedPrice(_requestId, _price);
         activateProtection(requestToProtection[_requestId], _price);
     }
