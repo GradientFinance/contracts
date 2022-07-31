@@ -45,20 +45,13 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
 
     event RequestedPrice(bytes32 indexed requestId, uint256 price);
 
-    /**
-    * @notice Rinkeby parameters:
-    * @param _ChainlinkToken 0x01BE23585060835E02B77ef475b0Cc51aA1e0709
-    * @param _ChainlinkOracle 0xf3FBB7f3391F62C8fe53f89B41dFC8159EE9653f
-    * @param _jobId ca98366cc7314957b8c012c72f05aeeb
-    * @param _fee (1 * LINK_DIVISIBILITY) / 10 /// 0,1 * 10**18 (Varies by network and job)
-    **/
-    constructor(address _ChainlinkToken, address _ChainlinkOracle, bytes32 _jobId, uint256 _fee, string memory _URI, address _addressNFTfi) ERC721("Gradient Protection", "PROTECTION") {
-        setChainlinkToken(_ChainlinkToken);
-        setChainlinkOracle(_ChainlinkOracle);
-        jobId = _jobId;
-        fee = _fee;
-        baseURI = _URI;
-        nftfiAddress = _addressNFTfi;
+    constructor() ERC721("Gradient Protection", "PROTECTION") {
+        setChainlinkToken(0x01BE23585060835E02B77ef475b0Cc51aA1e0709);
+        setChainlinkOracle(0xf3FBB7f3391F62C8fe53f89B41dFC8159EE9653f);
+        jobId = 'ca98366cc7314957b8c012c72f05aeeb';
+        fee = (1 * LINK_DIVISIBILITY) / 10;
+        baseURI = "https://app.gradient.city/metadata/";
+        nftfiAddress = 0x33e75763F3705252775C5AEEd92E5B4987622f44;
     }
 
     /**
@@ -72,7 +65,6 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
     * @param _collateralContract Contract address of loan collateral
     * @param _collateralId Token ID of loan collateral    
     **/
-
     function mintProtection(address _recipient, uint32 _nftfiId, uint256 _lowerBoundVal, uint256 _upperBoundVal, uint256 _startingUnix, uint256 _expiryUnix, address _collateralContract, uint256 _collateralId) public payable onlyOwner {
         /// msg.value value: amount of funds (wei) staked to cover losses of any collateral liquidation in case the borrower defaults
         _safeMint(_recipient, _nftfiId);
