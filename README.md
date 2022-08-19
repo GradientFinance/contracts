@@ -1,4 +1,4 @@
-# Gradient Protection - Smart Contracts
+# Gradient - Smart Contracts
 
 ## Deployments
 
