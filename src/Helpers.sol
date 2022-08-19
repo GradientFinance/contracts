@@ -33,25 +33,42 @@ contract Helpers {
         }
 
         /**
-        * @dev Separates a tx signature into v, r, and s values
-        * @param sig Tx signature  
+        * @notice Implementation of ecrecover to verify signature
+        * @param message Hashed mint parameters
+        * @param _signature Address deployer signature of parameters
         **/
-        function splitSignature(bytes memory sig)
+        function recoverSigner(bytes32 message, bytes memory _signature)
+            public
+            pure
+            returns (address)
+        {
+            uint8 v;
+            bytes32 r;
+            bytes32 s;
+            (v, r, s) = splitSignature(_signature);
+            return ecrecover(message, v, r, s);
+        }
+
+        /**
+        * @notice Separates a tx signature into v, r, and s values
+        * @param _signature Address deployer signature of parameters  
+        **/
+        function splitSignature(bytes memory _signature)
             public
             pure
             returns (uint8, bytes32, bytes32)
         {
-            require(sig.length == 65);
+            require(_signature.length == 65);
             bytes32 r;
             bytes32 s;
             uint8 v;
             assembly {
                 // First 32 bytes, after the length prefix
-                r := mload(add(sig, 32))
+                r := mload(add(_signature, 32))
                 // Second 32 bytes
-                s := mload(add(sig, 64))
+                s := mload(add(_signature, 64))
                 // Final byte (first byte of the next 32 bytes)
-                v := byte(0, mload(add(sig, 96)))
+                v := byte(0, mload(add(_signature, 96)))
             }
 
             return (v, r, s);

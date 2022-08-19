@@ -60,12 +60,13 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     * @param _minimum Minimum collateral price to not wipe the position,
     * @param _expiryUnix Unix timmestamp when NFTfi loan expires,
     * @param _collateralContract Contract address of loan collateral,
-    * @param _collateralId Token ID of loan collateral.
+    * @param _collateralId Token ID of loan collateral,
+    * @param _signature Address deployer signature of parameters.
     **/
-    function mintPosition(uint32 _nftfiId, bool _position, uint256 _leverage, uint256 _minimum, uint256 _expiryUnix, address _collateralContract, uint256 _collateralId) public payable {
+    function mintPosition(uint32 _nftfiId, bool _position, uint256 _leverage, uint256 _minimum, uint256 _expiryUnix, address _collateralContract, uint256 _collateralId, bytes memory _signature) public payable {
         /// msg.value value: amount of margin (wei, long) or hedge percentage (%, short)
         bytes32 message = keccak256(abi.encodePacked(msg.value, _nftfiId, _position, _leverage, _minimum, _expiryUnix, _collateralContract, _collateralId));
-        require(recoverSigner(message, sig) == owner(), "Invalid signature or parameters");
+        require(recoverSigner(message, _signature) == owner(), "Invalid signature or parameters");
 
         _safeMint(msg.sender, _nftfiId);
         positionData[_nftfiId] = LoanPosition({
