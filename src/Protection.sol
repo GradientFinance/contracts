@@ -41,7 +41,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
     }
 
     mapping(bytes32 => uint32) private requestToProtection;
-    mapping(uint32 => LoanProtection) private protectionData;
+    mapping(uint32 => LoanProtection) public protectionData;
 
     event RequestedPrice(bytes32 indexed requestId, uint256 price);
 
@@ -63,7 +63,10 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
     * @param _collateralContract Contract address of loan collateral
     * @param _collateralId Token ID of loan collateral    
     **/
-    function mintProtection(address _recipient, uint32 _nftfiId, uint256 _lowerBoundVal, uint256 _upperBoundVal, uint256 _startingUnix, uint256 _expiryUnix, address _collateralContract, uint256 _collateralId) public payable onlyOwner {
+    function mintProtection(address _recipient, uint32 _nftfiId, uint256 _lowerBoundVal, uint256 _upperBoundVal, uint256 _startingUnix, uint256 _expiryUnix, address _collateralContract, uint256 _collateralId) public {
+        bytes32 message = keccak256(abi.encodePacked(_recipient, _nftfiId, _lowerBoundVal, _upperBoundVal, _startingUnix, _expiryUnix, _collateralContract, _collateralId));
+        require(recoverSigner(message, sig) == botAddress, "Invalid signature or parameters");
+
         /// msg.value value: amount of funds (wei) staked to cover losses of any collateral liquidation in case the borrower defaults
         _safeMint(_recipient, _nftfiId);
         protectionData[_nftfiId] = LoanProtection({
@@ -75,6 +78,31 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
             collateralIdToProtection: _collateralId,
             collateralContractToProtection: _collateralContract
         });
+    }
+
+    /**
+    * @dev Separates a tx signature into v, r, and s values
+    * @param sig Tx signature  
+    **/
+    function splitSignature(bytes memory sig)
+        public
+        pure
+        returns (uint8, bytes32, bytes32)
+    {
+        require(sig.length == 65);
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
+        assembly {
+            // First 32 bytes, after the length prefix
+            r := mload(add(sig, 32))
+            // Second 32 bytes
+            s := mload(add(sig, 64))
+            // Final byte (first byte of the next 32 bytes)
+            v := byte(0, mload(add(sig, 96)))
+        }
+
+        return (v, r, s);
     }
 
     /**
