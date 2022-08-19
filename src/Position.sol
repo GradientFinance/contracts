@@ -37,10 +37,10 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
         uint256 leverage;
         uint256 expiryUnix;
         uint256 principal;
-        uint256 nftfiId;
+        uint32 nftfiId;
     }
 
-    mapping(bytes32 => uint32) private requestToPosition;
+    mapping(bytes32 => uint256) private requestToPosition;
     mapping(uint256 => LoanPosition) public positionData;
 
     event RequestedPrice(bytes32 indexed requestId, uint256 price);
@@ -116,7 +116,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
         Chainlink.Request memory req = buildChainlinkRequest(jobId, address(this), this.fulfillValue.selector);
 
         /// Set the URL to perform the GET request
-        string memory s = string.concat('http://app.gradient.city/api/', _toAsciiString(_tokenId));
+        string memory s = string.concat('http://app.gradient.city/api/', Strings.toString(_tokenId));
         req.add('get', s);
 
         req.add('path', 'price'); /// Chainlink nodes 1.0.0 and later support this format
