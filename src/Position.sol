@@ -27,21 +27,21 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     using Chainlink for Chainlink.Request;
     bytes32 private constant jobId = "9303ebb8365e472eb9a1505a3cc42317";
     uint256 private constant fee = 4500000000000000000; /// 4.5 LINK
+    uint256 private positionIdCounter = 0;
     address private nftfiAddress;
     string public baseURI;
 
     struct LoanPosition {
         bool position;
-        uint256 positionValue;
+        uint256 stake;
         uint256 leverage;
-        uint256 minimum;
         uint256 expiryUnix;
-        address collateralContract;
-        uint256 collateralId;
+        uint256 principal;
+        uint256 nftfiId;
     }
 
     mapping(bytes32 => uint32) private requestToPosition;
-    mapping(uint32 => LoanPosition) public positionData;
+    mapping(uint256 => LoanPosition) public positionData;
 
     event RequestedPrice(bytes32 indexed requestId, uint256 price);
 
@@ -57,90 +57,66 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     * @param _nftfiId ID of the NFTfi Promissory Note,
     * @param _position True if long or false if short,
     * @param _leverage Increases the risk of getting wiped out but also the potential profits,
-    * @param _minimum Minimum collateral price to not wipe the position,
     * @param _expiryUnix Unix timmestamp when NFTfi loan expires,
-    * @param _collateralContract Contract address of loan collateral,
-    * @param _collateralId Token ID of loan collateral,
+    * @param _principal Principal of the NFTfi loan,
     * @param _signature Address deployer signature of parameters.
     **/
-    function mintPosition(uint32 _nftfiId, bool _position, uint256 _leverage, uint256 _minimum, uint256 _expiryUnix, address _collateralContract, uint256 _collateralId, bytes memory _signature) public payable {
-        /// msg.value value: amount of margin (wei, long) or hedge percentage (%, short)
-        bytes32 message = keccak256(abi.encodePacked(msg.value, _nftfiId, _position, _leverage, _minimum, _expiryUnix, _collateralContract, _collateralId));
+    function mintPosition(uint32 _nftfiId, bool _position, uint256 _leverage, uint256 _expiryUnix, uint256 _principal, bytes memory _signature) public payable {
+        /// msg.value stake: amount of margin (wei, long) or hedge percentage (%, short)
+        bytes32 message = keccak256(abi.encodePacked(msg.value, _nftfiId, _position, _leverage, _expiryUnix));
         require(recoverSigner(message, _signature) == owner(), "Invalid signature or parameters");
 
-        _safeMint(msg.sender, _nftfiId);
-        positionData[_nftfiId] = LoanPosition({
+        ++positionIdCounter;
+        _safeMint(msg.sender, positionIdCounter);
+
+        positionData[positionIdCounter] = LoanPosition({
             position: _position,
-            positionValue: msg.value,
+            stake: msg.value,
             leverage: _leverage,
-            minimum: _minimum,
             expiryUnix: _expiryUnix,
-            collateralContract: _collateralContract,
-            collateralId: _collateralId
+            principal: _principal,
+            nftfiId: _nftfiId
         });
     }
 
     /**
     * @notice Returns the URL of a token's metadata
-    * @param tokenId Token ID
+    * @param _tokenId Token ID
     **/
-    function tokenURI(uint256 tokenId)
+    function tokenURI(uint256 _tokenId)
         public
         view
         virtual
         override
         returns (string memory)
     {
-        require(_ownerOf[tokenId] != address(0), "Non-existent token URI");
+        require(_ownerOf[_tokenId] != address(0), "Non-existent token URI");
         return
             bytes(baseURI).length > 0
-                ? string(abi.encodePacked(baseURI, tokenId.toString()))
+                ? string(abi.encodePacked(baseURI, _tokenId.toString()))
                 : "";
     }
 
     /**
-    * @notice Triggers the protection after loan reaches maturity
-    * @param _nftfiId is the id of the NFTfi Promissory Note/protection NFT 
+    * @notice Triggers the loan position after loan reaches maturity
+    * @param _tokenId ID of the position 
     **/
-    function triggerProtection(uint32 _nftfiId) external nonReentrant {
-        require(_ownerOf[_nftfiId] != address(0), "Protection does not exist");
-        require(IDirectLoanBase(nftfiAddress).loanRepaidOrLiquidated(_nftfiId));
-
-        /// Closes a expired protection when the borrower payed back or when the lender wants to keep the collateral
-        if (block.timestamp > positionData[_nftfiId].expiryUnix) {
-            uint256 payback = positionData[_nftfiId].stake;
-            positionData[_nftfiId].stake = 0;
-            _burn(_nftfiId);
-
-            /// Return stake
-            (bool transferTx, ) = owner().call{value: payback}("");
-            require(transferTx, "Payback transfer failed.");
-        }
-        else {
-            requestPrice(
-                positionData[_nftfiId].collateralContractToProtection,
-                positionData[_nftfiId].collateralIdToProtection,
-                positionData[_nftfiId].startingUnix,
-                _nftfiId);
-        }
+    function triggerPosition(uint256 _tokenId) external nonReentrant {
+        require(_ownerOf[_tokenId] != address(0), "Position does not exist");
+        require(block.timestamp > positionData[_tokenId].expiryUnix, "Loan not expired");
+        
+        requestPrice(_tokenId);
     }
 
     /**
-    * @dev Creates a Chainlink request to retrieve API response to validate collateral liquidation on OpenSea
-    * @param _contractAddress Contract address of loan collateral
-    * @param _tokenId Token ID of loan collateral
-    * @param _startingUnix Unix timestamp when loan starts (NFTfi)
-    * @param _nftfiId Token ID of ERC721 protection 
+    * @dev Creates a Chainlink request to retrieve API response to validate the NFT floor price
+    * @param _tokenId ID of the position
     **/
-    function requestPrice(address _contractAddress, uint256 _tokenId, uint256 _startingUnix, uint32 _nftfiId) private {
+    function requestPrice(uint256 _tokenId) private {
         Chainlink.Request memory req = buildChainlinkRequest(jobId, address(this), this.fulfillValue.selector);
 
-        /// Set the URL to perform the GET request on -- will change!
-        string memory s = string.concat('http://disestevez.pythonanywhere.com/', _toAsciiString(_contractAddress));
-        s = string.concat(s, "/");
-        s = string.concat(s, Strings.toString(_tokenId));
-        s = string.concat(s, "/");
-        s = string.concat(s, Strings.toString(_startingUnix));
+        /// Set the URL to perform the GET request
+        string memory s = string.concat('http://app.gradient.city/api/', _toAsciiString(_tokenId));
         req.add('get', s);
 
         req.add('path', 'price'); /// Chainlink nodes 1.0.0 and later support this format
@@ -151,67 +127,37 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
 
         /// Sends the request
         bytes32 sendRequest = sendChainlinkRequest(req, fee);
-        requestToPosition[sendRequest] = _nftfiId;
+        requestToPosition[sendRequest] = _tokenId;
     }
 
     /**
-    * @notice Runs the protection using the data from OpenSea
-    * @param _nftfiId is the id of the NFTfi Promissory Note/protection NFT 
+    * @notice Runs the position using the requested price
+    * @param _tokenId ID of the position 
     **/
-    function activateProtection(uint32 _nftfiId, uint256 _liquidationFunds) private {
-         /// Check to prevent oracle manipulation by external calls 
-        require(_ownerOf[_nftfiId] != address(0), "Protection does not exist");
+    function activateProtection(uint256 _tokenId, uint256 _price) private {
+        require(_ownerOf[_tokenId] != address(0), "Position does not exist");
+        address receiverPosition = _ownerOf[_tokenId];
 
-        /// Closes a protection after the collateral has been liquidated by covering any losses
-        /// The Oracle returns a higher value than 2**256 - 7 when a Dutch auction is not found
-        if (_liquidationFunds < 2**256 - 7) {
-            /// Option A: The collateral is liquidated at a price above the upper-bound of the protection 
-            if (_liquidationFunds > positionData[_nftfiId].upperBound) {
-                uint256 payback = positionData[_nftfiId].stake;
-                positionData[_nftfiId].stake = 0;
-                _burn(_nftfiId);
-
-                /// Return stake
-                (bool transferTx, ) = owner().call{value: payback}("");
-                require(transferTx, "Payback transfer failed.");
+        /// Position is long
+        if (positionData[_tokenId].position) {
+            if (_price > positionData[_tokenId].principal) {
+                /// return el margin + premium 
             }
-            /// Option B: The collateral is liquidated at a price between the bounds of the protection
-            else if (positionData[_nftfiId].lowerBound < _liquidationFunds && _liquidationFunds < positionData[_nftfiId].upperBound) {
-                address receiverProtection = _ownerOf[_nftfiId];
-                uint256 losses = positionData[_nftfiId].upperBound - _liquidationFunds;
-                uint256 payback = positionData[_nftfiId].stake - losses;
-                positionData[_nftfiId].stake = 0;
-                _burn(_nftfiId);
-
-                /// Return remaining stake, if any.
-                (bool transferTx1, ) = owner().call{value: payback}("");
-                require(transferTx1, "Payback transfer failed.");
-
-                /// Return all $ from the liquidation to protection owner and cover lossses
-                (bool transferTx2, ) = receiverProtection.call{value: losses}("");
-                require(transferTx2, "Protection transfer failed.");
-            }
-            /// Option C: The collateral is liquidated at a price below the lower-bound of the protection
-            else if (_liquidationFunds < positionData[_nftfiId].lowerBound) {
-                address receiverProtection = _ownerOf[_nftfiId];
-                uint256 payback = positionData[_nftfiId].stake;
-                positionData[_nftfiId].stake = 0;
-                _burn(_nftfiId);
-
-                /// Return all $ from the liquidation and protection to protection owner
-                (bool transferTx, ) = receiverProtection.call{value: payback}("");
-                require(transferTx, "Protection transfer failed.");
+            else {
+                /// return (margin + premium)/leverage - (principal - collateral price)
             }
         }
+
+        /// Position is short
         else {
-            revert LiquidationNotFound();
+
         }
     }
 
     /**
     * @dev Recieves oracle response in the form of uint256
     * @param _requestId Chainlink request ID
-    * @param _price fetched price (wei)
+    * @param _price Fetched price of collateral (wei)
     **/
     function fulfillValue(bytes32 _requestId, uint256 _price) public recordChainlinkFulfillment(_requestId) {
         emit RequestedPrice(_requestId, _price);
@@ -229,7 +175,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     /**
     * @notice Allows to withdraw LINK tokens
     **/
-    function withdrawLink() public onlyOwner {
+    function withdrawLink() external onlyOwner {
         LinkTokenInterface link = LinkTokenInterface(chainlinkTokenAddress());
         require(link.transfer(owner(), link.balanceOf(address(this))), 'Unable to transfer');
     }
