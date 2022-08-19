@@ -10,7 +10,7 @@ import './Helpers.sol';
 
 error NonExistentTokenURI();
 error WithdrawTransfer();
-error ProtectionStillActive();
+error PositionStillActive();
 error LiquidationNotFound();
 
 interface IDirectLoanBase {
@@ -18,11 +18,11 @@ interface IDirectLoanBase {
 }
 
 /**
- * @title Gradient Protection (v0.1) contract
+ * @title Gradient (v0.2) contract
  * @author cairoeth
- * @dev ERC721 contract from which NFTs are minted to represent loan protection.
+ * @dev ERC721 contract from which NFTs are minted to represent a short or long position.
  **/
-contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient {
+contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient {
     using Strings for uint256;
     using Chainlink for Chainlink.Request;
     bytes32 private constant jobId = "9303ebb8365e472eb9a1505a3cc42317";
@@ -30,7 +30,7 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
     address private nftfiAddress;
     string public baseURI;
 
-    struct LoanProtection {
+    struct LoanPosition {
         uint256 stake;
         uint256 lowerBound;
         uint256 upperBound;
@@ -40,8 +40,8 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
         address collateralContractToProtection;
     }
 
-    mapping(bytes32 => uint32) private requestToProtection;
-    mapping(uint32 => LoanProtection) public protectionData;
+    mapping(bytes32 => uint32) private requestToPosition;
+    mapping(uint32 => LoanPosition) public positionData;
 
     event RequestedPrice(bytes32 indexed requestId, uint256 price);
 
@@ -53,56 +53,29 @@ contract Protection is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClien
     }
 
     /**
-    * @notice Mints ERC721 token that represents loan protection
-    * @param _recipient Receiver address of the protection (lender)
-    * @param _nftfiId ID of the NFTfi Promissory Note
-    * @param _lowerBoundVal Lower boundary of the protection
-    * @param _upperBoundVal Upper boundary of the protection
-    * @param _startingUnix Unix timestamp when loan starts (NFTfi)
-    * @param _expiryUnix Unix timmestamp when loan expires (NFTfi)    
-    * @param _collateralContract Contract address of loan collateral
-    * @param _collateralId Token ID of loan collateral    
+    * @notice Mints ERC721 token that represents a long or short position,
+    * @param _nftfiId ID of the NFTfi Promissory Note,
+    * @param _position True if long or false if short,
+    * @param _leverage Increases the risk of getting wiped out but also the potential profits,
+    * @param _minimum Minimum collateral price to not wipe the position,
+    * @param _expiryUnix Unix timmestamp when NFTfi loan expires,
+    * @param _collateralContract Contract address of loan collateral,
+    * @param _collateralId Token ID of loan collateral.
     **/
-    function mintProtection(address _recipient, uint32 _nftfiId, uint256 _lowerBoundVal, uint256 _upperBoundVal, uint256 _startingUnix, uint256 _expiryUnix, address _collateralContract, uint256 _collateralId) public {
-        bytes32 message = keccak256(abi.encodePacked(_recipient, _nftfiId, _lowerBoundVal, _upperBoundVal, _startingUnix, _expiryUnix, _collateralContract, _collateralId));
-        require(recoverSigner(message, sig) == botAddress, "Invalid signature or parameters");
+    function mintPosition(uint32 _nftfiId, bool _position, uint256 _leverage, uint256 _minimum, uint256 _expiryUnix, address _collateralContract, uint256 _collateralId) public payable {
+        /// msg.value value: amount of margin (wei, long) or hedge percentage (%, short)
+        bytes32 message = keccak256(abi.encodePacked(msg.value, _nftfiId, _position, _leverage, _minimum, _expiryUnix, _collateralContract, _collateralId));
+        require(recoverSigner(message, sig) == owner(), "Invalid signature or parameters");
 
-        /// msg.value value: amount of funds (wei) staked to cover losses of any collateral liquidation in case the borrower defaults
-        _safeMint(_recipient, _nftfiId);
-        protectionData[_nftfiId] = LoanProtection({
+        _safeMint(msg.sender, _nftfiId);
+        positionData[_nftfiId] = LoanPosition({
             stake: msg.value,
             lowerBound: _lowerBoundVal,
             upperBound: _upperBoundVal,
-            startingUnix: _startingUnix,
             expiryUnix: _expiryUnix + 1 days,
             collateralIdToProtection: _collateralId,
             collateralContractToProtection: _collateralContract
         });
-    }
-
-    /**
-    * @dev Separates a tx signature into v, r, and s values
-    * @param sig Tx signature  
-    **/
-    function splitSignature(bytes memory sig)
-        public
-        pure
-        returns (uint8, bytes32, bytes32)
-    {
-        require(sig.length == 65);
-        bytes32 r;
-        bytes32 s;
-        uint8 v;
-        assembly {
-            // First 32 bytes, after the length prefix
-            r := mload(add(sig, 32))
-            // Second 32 bytes
-            s := mload(add(sig, 64))
-            // Final byte (first byte of the next 32 bytes)
-            v := byte(0, mload(add(sig, 96)))
-        }
-
-        return (v, r, s);
     }
 
     /**

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.15;
 
 /**
- * @title Gradient Protection (v0.1) helpers
+ * @title Gradient (v0.2) helpers
  * @author cairoeth
  * @dev Contract which contains helper functions for main contract.
  **/
@@ -30,5 +30,30 @@ contract Helpers {
         function _char(bytes1 b) internal pure returns (bytes1 c) {
             if (uint8(b) < 10) return bytes1(uint8(b) + 0x30);
             else return bytes1(uint8(b) + 0x57);
+        }
+
+        /**
+        * @dev Separates a tx signature into v, r, and s values
+        * @param sig Tx signature  
+        **/
+        function splitSignature(bytes memory sig)
+            public
+            pure
+            returns (uint8, bytes32, bytes32)
+        {
+            require(sig.length == 65);
+            bytes32 r;
+            bytes32 s;
+            uint8 v;
+            assembly {
+                // First 32 bytes, after the length prefix
+                r := mload(add(sig, 32))
+                // Second 32 bytes
+                s := mload(add(sig, 64))
+                // Final byte (first byte of the next 32 bytes)
+                v := byte(0, mload(add(sig, 96)))
+            }
+
+            return (v, r, s);
         }
 }
