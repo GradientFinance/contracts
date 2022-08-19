@@ -57,8 +57,8 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     * @param _signature Address deployer signature of parameters.
     **/
     function mintPosition(uint32 _nftfiId, bool _position, uint256 _leverage, uint256 _premium, uint256 _expiryUnix, uint256 _principal, bytes memory _signature) public payable {
-        /// msg.value margin: amount of margin (wei, long) or hedge percentage (%, short)
-        bytes32 message = keccak256(abi.encodePacked(msg.value, _nftfiId, _position, _leverage, _expiryUnix));
+        /// msg.value == margin
+        bytes32 message = keccak256(abi.encodePacked(msg.value, _nftfiId, _position, _leverage, _premium, _expiryUnix, _principal));
         require(recoverSigner(message, _signature) == owner(), "Invalid signature or parameters");
 
         ++positionIdCounter;
