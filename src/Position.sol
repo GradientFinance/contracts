@@ -31,13 +31,13 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     string public baseURI;
 
     struct LoanPosition {
-        uint256 stake;
-        uint256 lowerBound;
-        uint256 upperBound;
-        uint256 startingUnix;
+        bool position;
+        uint256 positionValue;
+        uint256 leverage;
+        uint256 minimum;
         uint256 expiryUnix;
-        uint256 collateralIdToProtection;
-        address collateralContractToProtection;
+        address collateralContract;
+        uint256 collateralId;
     }
 
     mapping(bytes32 => uint32) private requestToPosition;
@@ -70,12 +70,13 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
 
         _safeMint(msg.sender, _nftfiId);
         positionData[_nftfiId] = LoanPosition({
-            stake: msg.value,
-            lowerBound: _lowerBoundVal,
-            upperBound: _upperBoundVal,
-            expiryUnix: _expiryUnix + 1 days,
-            collateralIdToProtection: _collateralId,
-            collateralContractToProtection: _collateralContract
+            position: _position,
+            positionValue: msg.value,
+            leverage: _leverage,
+            minimum: _minimum,
+            expiryUnix: _expiryUnix,
+            collateralContract: _collateralContract,
+            collateralId: _collateralId
         });
     }
 
@@ -106,9 +107,9 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
         require(IDirectLoanBase(nftfiAddress).loanRepaidOrLiquidated(_nftfiId));
 
         /// Closes a expired protection when the borrower payed back or when the lender wants to keep the collateral
-        if (block.timestamp > protectionData[_nftfiId].expiryUnix) {
-            uint256 payback = protectionData[_nftfiId].stake;
-            protectionData[_nftfiId].stake = 0;
+        if (block.timestamp > positionData[_nftfiId].expiryUnix) {
+            uint256 payback = positionData[_nftfiId].stake;
+            positionData[_nftfiId].stake = 0;
             _burn(_nftfiId);
 
             /// Return stake
@@ -117,9 +118,9 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
         }
         else {
             requestPrice(
-                protectionData[_nftfiId].collateralContractToProtection,
-                protectionData[_nftfiId].collateralIdToProtection,
-                protectionData[_nftfiId].startingUnix,
+                positionData[_nftfiId].collateralContractToProtection,
+                positionData[_nftfiId].collateralIdToProtection,
+                positionData[_nftfiId].startingUnix,
                 _nftfiId);
         }
     }
@@ -150,7 +151,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
 
         /// Sends the request
         bytes32 sendRequest = sendChainlinkRequest(req, fee);
-        requestToProtection[sendRequest] = _nftfiId;
+        requestToPosition[sendRequest] = _nftfiId;
     }
 
     /**
@@ -165,9 +166,9 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
         /// The Oracle returns a higher value than 2**256 - 7 when a Dutch auction is not found
         if (_liquidationFunds < 2**256 - 7) {
             /// Option A: The collateral is liquidated at a price above the upper-bound of the protection 
-            if (_liquidationFunds > protectionData[_nftfiId].upperBound) {
-                uint256 payback = protectionData[_nftfiId].stake;
-                protectionData[_nftfiId].stake = 0;
+            if (_liquidationFunds > positionData[_nftfiId].upperBound) {
+                uint256 payback = positionData[_nftfiId].stake;
+                positionData[_nftfiId].stake = 0;
                 _burn(_nftfiId);
 
                 /// Return stake
@@ -175,11 +176,11 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
                 require(transferTx, "Payback transfer failed.");
             }
             /// Option B: The collateral is liquidated at a price between the bounds of the protection
-            else if (protectionData[_nftfiId].lowerBound < _liquidationFunds && _liquidationFunds < protectionData[_nftfiId].upperBound) {
+            else if (positionData[_nftfiId].lowerBound < _liquidationFunds && _liquidationFunds < positionData[_nftfiId].upperBound) {
                 address receiverProtection = _ownerOf[_nftfiId];
-                uint256 losses = protectionData[_nftfiId].upperBound - _liquidationFunds;
-                uint256 payback = protectionData[_nftfiId].stake - losses;
-                protectionData[_nftfiId].stake = 0;
+                uint256 losses = positionData[_nftfiId].upperBound - _liquidationFunds;
+                uint256 payback = positionData[_nftfiId].stake - losses;
+                positionData[_nftfiId].stake = 0;
                 _burn(_nftfiId);
 
                 /// Return remaining stake, if any.
@@ -191,10 +192,10 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
                 require(transferTx2, "Protection transfer failed.");
             }
             /// Option C: The collateral is liquidated at a price below the lower-bound of the protection
-            else if (_liquidationFunds < protectionData[_nftfiId].lowerBound) {
+            else if (_liquidationFunds < positionData[_nftfiId].lowerBound) {
                 address receiverProtection = _ownerOf[_nftfiId];
-                uint256 payback = protectionData[_nftfiId].stake;
-                protectionData[_nftfiId].stake = 0;
+                uint256 payback = positionData[_nftfiId].stake;
+                positionData[_nftfiId].stake = 0;
                 _burn(_nftfiId);
 
                 /// Return all $ from the liquidation and protection to protection owner
@@ -214,7 +215,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     **/
     function fulfillValue(bytes32 _requestId, uint256 _price) public recordChainlinkFulfillment(_requestId) {
         emit RequestedPrice(_requestId, _price);
-        activateProtection(requestToProtection[_requestId], _price);
+        activateProtection(requestToPosition[_requestId], _price);
     }
 
     /**
