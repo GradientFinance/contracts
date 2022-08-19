@@ -8,11 +8,6 @@ import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import 'chainlink/contracts/src/v0.8/ChainlinkClient.sol';
 import './Helpers.sol';
 
-error NonExistentTokenURI();
-error WithdrawTransfer();
-error PositionStillActive();
-error LiquidationNotFound();
-
 interface IDirectLoanBase {
     function loanRepaidOrLiquidated(uint32) external view returns (bool);
 }
@@ -28,13 +23,13 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     bytes32 private constant jobId = "9303ebb8365e472eb9a1505a3cc42317";
     uint256 private constant fee = 4500000000000000000; /// 4.5 LINK
     uint256 private positionIdCounter = 0;
-    address private nftfiAddress;
     string public baseURI;
 
     struct LoanPosition {
         bool position;
-        uint256 stake;
+        uint256 margin;
         uint256 leverage;
+        uint256 premium;
         uint256 expiryUnix;
         uint256 principal;
         uint32 nftfiId;
@@ -49,7 +44,6 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
         setChainlinkToken(0x514910771AF9Ca656af840dff83E8264EcF986CA);
         setChainlinkOracle(0x188b71C9d27cDeE01B9b0dfF5C1aff62E8D6F434);
         baseURI = "https://app.gradient.city/metadata/";
-        nftfiAddress = 0xf896527c49b44aAb3Cf22aE356Fa3AF8E331F280;
     }
 
     /**
@@ -57,12 +51,13 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     * @param _nftfiId ID of the NFTfi Promissory Note,
     * @param _position True if long or false if short,
     * @param _leverage Increases the risk of getting wiped out but also the potential profits,
+    * @param _premium Premium return,
     * @param _expiryUnix Unix timmestamp when NFTfi loan expires,
     * @param _principal Principal of the NFTfi loan,
     * @param _signature Address deployer signature of parameters.
     **/
-    function mintPosition(uint32 _nftfiId, bool _position, uint256 _leverage, uint256 _expiryUnix, uint256 _principal, bytes memory _signature) public payable {
-        /// msg.value stake: amount of margin (wei, long) or hedge percentage (%, short)
+    function mintPosition(uint32 _nftfiId, bool _position, uint256 _leverage, uint256 _premium, uint256 _expiryUnix, uint256 _principal, bytes memory _signature) public payable {
+        /// msg.value margin: amount of margin (wei, long) or hedge percentage (%, short)
         bytes32 message = keccak256(abi.encodePacked(msg.value, _nftfiId, _position, _leverage, _expiryUnix));
         require(recoverSigner(message, _signature) == owner(), "Invalid signature or parameters");
 
@@ -71,8 +66,9 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
 
         positionData[positionIdCounter] = LoanPosition({
             position: _position,
-            stake: msg.value,
+            margin: msg.value,
             leverage: _leverage,
+            premium: _premium,
             expiryUnix: _expiryUnix,
             principal: _principal,
             nftfiId: _nftfiId
@@ -140,17 +136,57 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
 
         /// Position is long
         if (positionData[_tokenId].position) {
-            if (_price > positionData[_tokenId].principal) {
-                /// return el margin + premium 
+            if (_price >= positionData[_tokenId].principal) {
+                /// Loan did not end at a loss.
+                uint256 payback = positionData[_tokenId].margin + positionData[_tokenId].premium;
+                _burn(_tokenId);
+                
+                /// Return margin + premium
+                (bool transferTx, ) = receiverPosition.call{value: payback}("");
+                require(transferTx, "Payback transfer failed.");
             }
             else {
-                /// return (margin + premium)/leverage - (principal - collateral price)
+                /// Loan took a loss.
+                if (_price > (positionData[_tokenId].margin + positionData[_tokenId].premium) / positionData[_tokenId].leverage) {
+                    /// The position wasn't completely wiped, so the user can get some of their funds back.
+                    uint256 payback = max(0, positionData[_tokenId].margin + positionData[_tokenId].premium - (positionData[_tokenId].principal - _price) * positionData[_tokenId].leverage);
+                    _burn(_tokenId);
+                    
+                    (bool transferTx, ) = receiverPosition.call{value: payback}("");
+                    require(transferTx, "Payback transfer failed.");
+                }
+                else {
+                    /// The position was completely wiped, so the user loses the margin and the premium.
+                    _burn(_tokenId);
+                }
             }
         }
 
         /// Position is short
         else {
-
+            if (_price >= positionData[_tokenId].principal) {
+                /// Loan did not end at a loss, so the user loses the premium they had spent.
+                _burn(_tokenId);
+            }
+            else {
+                /// Loan took a loss.
+                if (_price > (positionData[_tokenId].margin + positionData[_tokenId].premium) / positionData[_tokenId].leverage) {
+                    /// The position wasn't completely wiped, so the user can get some of their funds back.
+                    uint256 payback = positionData[_tokenId].margin + positionData[_tokenId].premium - (positionData[_tokenId].principal - _price) * positionData[_tokenId].leverage;
+                    _burn(_tokenId);
+                    
+                    (bool transferTx, ) = receiverPosition.call{value: payback}("");
+                    require(transferTx, "Payback transfer failed.");
+                }
+                else {
+                    /// Loan took a loss.
+                    uint256 payback = min(positionData[_tokenId].margin, (positionData[_tokenId].principal - _price) * positionData[_tokenId].leverage);
+                    _burn(_tokenId);
+                    
+                    (bool transferTx, ) = receiverPosition.call{value: payback}("");
+                    require(transferTx, "Payback transfer failed.");
+                }
+            }
         }
     }
 
@@ -162,14 +198,6 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     function fulfillValue(bytes32 _requestId, uint256 _price) public recordChainlinkFulfillment(_requestId) {
         emit RequestedPrice(_requestId, _price);
         activateProtection(requestToPosition[_requestId], _price);
-    }
-
-    /**
-    * @notice Sets the NFTfi address
-    * @param _address is the NFTfi main smart contract address
-    **/
-    function setNFTfiAddress(address _address) external onlyOwner {
-       nftfiAddress = _address;
     }
 
     /**

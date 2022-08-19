@@ -38,7 +38,7 @@ contract Helpers {
         * @param _signature Address deployer signature of parameters
         **/
         function recoverSigner(bytes32 message, bytes memory _signature)
-            public
+            internal
             pure
             returns (address)
         {
@@ -54,7 +54,7 @@ contract Helpers {
         * @param _signature Address deployer signature of parameters  
         **/
         function splitSignature(bytes memory _signature)
-            public
+            internal
             pure
             returns (uint8, bytes32, bytes32)
         {
@@ -72,5 +72,19 @@ contract Helpers {
             }
 
             return (v, r, s);
+        }
+ 
+        /**
+        * @notice Returns the largest of two numbers.
+        */
+        function max(uint256 a, uint256 b) internal pure returns (uint256) {
+            return a >= b ? a : b;
+        }
+
+        /**
+        * @notice Returns the smallest of two numbers.
+        */
+        function min(uint256 a, uint256 b) internal pure returns (uint256) {
+            return a < b ? a : b;
         }
 }
