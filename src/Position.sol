@@ -23,7 +23,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     bytes32 private constant jobId = "9303ebb8365e472eb9a1505a3cc42317";
     uint256 private constant fee = 4500000000000000000; /// 4.5 LINK
     uint256 private positionIdCounter = 0;
-    string public baseURI;
+    string public constant baseURI = "https://app.gradient.city/metadata/";
 
     struct LoanPosition {
         bool position;
@@ -40,10 +40,9 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
 
     event RequestedPrice(bytes32 indexed requestId, uint256 price);
 
-    constructor() ERC721("Gradient Protection", "PROTECTION") {
-        setChainlinkToken(0x514910771AF9Ca656af840dff83E8264EcF986CA);
-        setChainlinkOracle(0x188b71C9d27cDeE01B9b0dfF5C1aff62E8D6F434);
-        baseURI = "https://app.gradient.city/metadata/";
+    constructor(address _linkAddress, address _oracleAddress) ERC721("Gradient Protection", "PROTECTION") {
+        setChainlinkToken(_linkAddress);
+        setChainlinkOracle(_oracleAddress);
     }
 
     /**
