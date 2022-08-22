@@ -38,7 +38,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     mapping(bytes32 => uint256) private requestToPosition;
     mapping(uint256 => LoanPosition) public positionData;
 
-    event RequestedPrice(bytes32 indexed requestId, uint256 price);
+    event RequestedFloor(bytes32 indexed requestId, uint256 floor);
 
     constructor(address _linkAddress, address _oracleAddress) ERC721("Gradient Protection", "PROTECTION") {
         setChainlinkToken(_linkAddress);
@@ -100,21 +100,21 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
         require(_ownerOf[_tokenId] != address(0), "Position does not exist");
         require(block.timestamp > positionData[_tokenId].expiryUnix, "Loan not expired");
         
-        requestPrice(_tokenId);
+        requestFloor(_tokenId);
     }
 
     /**
-    * @dev Creates a Chainlink request to retrieve API response to validate the NFT floor price
+    * @dev Creates a Chainlink request to retrieve API response to validate the collateral floor
     * @param _tokenId ID of the position
     **/
-    function requestPrice(uint256 _tokenId) private {
+    function requestFloor(uint256 _tokenId) private {
         Chainlink.Request memory req = buildChainlinkRequest(jobId, address(this), this.fulfillValue.selector);
 
         /// Set the URL to perform the GET request
-        string memory s = string.concat('http://app.gradient.city/api/', Strings.toString(_tokenId));
+        string memory s = string.concat('http://app.gradient.city/api/', Strings.toString(positionData[_tokenId].nftfiId));
         req.add('get', s);
 
-        req.add('path', 'price'); /// Chainlink nodes 1.0.0 and later support this format
+        req.add('path', 'floor'); /// Chainlink nodes 1.0.0 and later support this format
 
         /// Multiply 1
         int256 timesAmount = 1;
@@ -126,16 +126,16 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     }
 
     /**
-    * @notice Runs the position using the requested price
+    * @notice Runs the position using the requested floor
     * @param _tokenId ID of the position 
     **/
-    function activateProtection(uint256 _tokenId, uint256 _price) private {
+    function activateProtection(uint256 _tokenId, uint256 _floor) private {
         require(_ownerOf[_tokenId] != address(0), "Position does not exist");
         address receiverPosition = _ownerOf[_tokenId];
 
         /// Position is long
         if (positionData[_tokenId].position) {
-            if (_price >= positionData[_tokenId].principal) {
+            if (_floor >= positionData[_tokenId].principal) {
                 /// Loan did not end at a loss.
                 uint256 payback = positionData[_tokenId].margin + positionData[_tokenId].premium;
                 _burn(_tokenId);
@@ -146,9 +146,9 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
             }
             else {
                 /// Loan took a loss.
-                if (_price > (positionData[_tokenId].margin + positionData[_tokenId].premium) / positionData[_tokenId].leverage) {
+                if (_floor > (positionData[_tokenId].margin + positionData[_tokenId].premium) / positionData[_tokenId].leverage) {
                     /// The position wasn't completely wiped, so the user can get some of their funds back.
-                    uint256 payback = max(0, positionData[_tokenId].margin + positionData[_tokenId].premium - (positionData[_tokenId].principal - _price) * positionData[_tokenId].leverage);
+                    uint256 payback = max(0, positionData[_tokenId].margin + positionData[_tokenId].premium - (positionData[_tokenId].principal - _floor) * positionData[_tokenId].leverage);
                     _burn(_tokenId);
                     
                     (bool transferTx, ) = receiverPosition.call{value: payback}("");
@@ -163,15 +163,15 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
 
         /// Position is short
         else {
-            if (_price >= positionData[_tokenId].principal) {
+            if (_floor >= positionData[_tokenId].principal) {
                 /// Loan did not end at a loss, so the user loses the premium they had spent.
                 _burn(_tokenId);
             }
             else {
                 /// Loan took a loss.
-                if (_price > (positionData[_tokenId].margin + positionData[_tokenId].premium) / positionData[_tokenId].leverage) {
+                if (_floor > (positionData[_tokenId].margin + positionData[_tokenId].premium) / positionData[_tokenId].leverage) {
                     /// The position wasn't completely wiped, so the user can get some of their funds back.
-                    uint256 payback = positionData[_tokenId].margin + positionData[_tokenId].premium - (positionData[_tokenId].principal - _price) * positionData[_tokenId].leverage;
+                    uint256 payback = positionData[_tokenId].margin + positionData[_tokenId].premium - (positionData[_tokenId].principal - _floor) * positionData[_tokenId].leverage;
                     _burn(_tokenId);
                     
                     (bool transferTx, ) = receiverPosition.call{value: payback}("");
@@ -179,7 +179,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
                 }
                 else {
                     /// Loan took a loss.
-                    uint256 payback = min(positionData[_tokenId].margin, (positionData[_tokenId].principal - _price) * positionData[_tokenId].leverage);
+                    uint256 payback = min(positionData[_tokenId].margin, (positionData[_tokenId].principal - _floor) * positionData[_tokenId].leverage);
                     _burn(_tokenId);
                     
                     (bool transferTx, ) = receiverPosition.call{value: payback}("");
@@ -192,11 +192,11 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     /**
     * @dev Recieves oracle response in the form of uint256
     * @param _requestId Chainlink request ID
-    * @param _price Fetched price of collateral (wei)
+    * @param _floor Fetched floor of collateral (wei)
     **/
-    function fulfillValue(bytes32 _requestId, uint256 _price) public recordChainlinkFulfillment(_requestId) {
-        emit RequestedPrice(_requestId, _price);
-        activateProtection(requestToPosition[_requestId], _price);
+    function fulfillValue(bytes32 _requestId, uint256 _floor) public recordChainlinkFulfillment(_requestId) {
+        emit RequestedFloor(_requestId, _floor);
+        activateProtection(requestToPosition[_requestId], _floor);
     }
 
     /**
