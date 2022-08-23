@@ -40,7 +40,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
 
     event RequestedFloor(bytes32 indexed requestId, uint256 floor);
 
-    constructor(address _linkAddress, address _oracleAddress) ERC721("Gradient Protection", "PROTECTION") {
+    constructor(address _linkAddress, address _oracleAddress) ERC721("Gradient Position", "POSITION") {
         setChainlinkToken(_linkAddress);
         setChainlinkOracle(_oracleAddress);
     }
@@ -66,7 +66,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
         positionData[positionIdCounter] = LoanPosition({
             position: _position,
             margin: msg.value,
-            leverage: _leverage,
+            leverage: _leverage / 1 ether,
             premium: _premium,
             expiryUnix: _expiryUnix,
             principal: _principal,
