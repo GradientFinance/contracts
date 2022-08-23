@@ -8,10 +8,6 @@ import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import 'chainlink/contracts/src/v0.8/ChainlinkClient.sol';
 import './Helpers.sol';
 
-interface IDirectLoanBase {
-    function loanRepaidOrLiquidated(uint32) external view returns (bool);
-}
-
 /**
  * @title Gradient (v0.2) contract
  * @author cairoeth
@@ -32,7 +28,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
         uint256 premium;
         uint256 expiryUnix;
         uint256 principal;
-        uint32 nftfiId;
+        uint256 nftfiId;
     }
 
     mapping(bytes32 => uint256) private requestToPosition;
@@ -43,7 +39,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     constructor(address _linkAddress, address _oracleAddress) ERC721("Gradient Position", "POSITION") {
         setChainlinkToken(_linkAddress);
         setChainlinkOracle(_oracleAddress);
-        jobId = "9303ebb8365e472eb9a1505a3cc42317";
+        jobId = "7223acbd01654282865b678924126013";
         fee = (1 * LINK_DIVISIBILITY) / 10;  // 0.1 LINK
     }
 
@@ -57,7 +53,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     * @param _principal Principal of the NFTfi loan,
     * @param _signature Address deployer signature of parameters.
     **/
-    function mintPosition(uint32 _nftfiId, bool _position, uint256 _leverage, uint256 _premium, uint256 _expiryUnix, uint256 _principal, bytes memory _signature) public payable {
+    function mintPosition(uint256 _nftfiId, bool _position, uint256 _leverage, uint256 _premium, uint256 _expiryUnix, uint256 _principal, bytes memory _signature) public payable {
         /// msg.value == margin
         bytes32 message = keccak256(abi.encodePacked(msg.value, _nftfiId, _position, _leverage, _premium, _expiryUnix, _principal));
         require(recoverSigner(message, _signature) == owner(), "Invalid signature or parameters");
