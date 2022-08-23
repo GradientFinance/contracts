@@ -14,6 +14,7 @@ import './Helpers.sol';
  * @dev ERC721 contract from which NFTs are minted to represent a short or long position.
  **/
 contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient {
+    using Strings for uint32;
     using Strings for uint256;
     using Chainlink for Chainlink.Request;
     bytes32 private jobId;
@@ -28,7 +29,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
         uint256 premium;
         uint256 expiryUnix;
         uint256 principal;
-        uint256 nftfiId;
+        uint32 nftfiId;
     }
 
     mapping(bytes32 => uint256) private requestToPosition;
@@ -39,8 +40,8 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     constructor(address _linkAddress, address _oracleAddress) ERC721("Gradient Position", "POSITION") {
         setChainlinkToken(_linkAddress);
         setChainlinkOracle(_oracleAddress);
-        jobId = "7223acbd01654282865b678924126013";
-        fee = (1 * LINK_DIVISIBILITY) / 10;  // 0.1 LINK
+        jobId = 'ca98366cc7314957b8c012c72f05aeeb';
+        fee = (1 * LINK_DIVISIBILITY) / 10; // 0,1 * 10**18 (Varies by network and job)
     }
 
     /**
@@ -53,7 +54,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     * @param _principal Principal of the NFTfi loan,
     * @param _signature Address deployer signature of parameters.
     **/
-    function mintPosition(uint256 _nftfiId, bool _position, uint256 _leverage, uint256 _premium, uint256 _expiryUnix, uint256 _principal, bytes memory _signature) public payable {
+    function mintPosition(uint32 _nftfiId, bool _position, uint256 _leverage, uint256 _premium, uint256 _expiryUnix, uint256 _principal, bytes memory _signature) public payable {
         /// msg.value == margin
         bytes32 message = keccak256(abi.encodePacked(msg.value, _nftfiId, _position, _leverage, _premium, _expiryUnix, _principal));
         require(recoverSigner(message, _signature) == owner(), "Invalid signature or parameters");
@@ -106,19 +107,17 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     * @param _tokenId ID of the position
     **/
     function requestFloor(uint256 _tokenId) private {
-        Chainlink.Request memory req = buildChainlinkRequest(jobId, address(this), this.fulfillValue.selector);
+        Chainlink.Request memory req = buildChainlinkRequest(jobId, address(this), this.fulfill.selector);
 
-        /// Set the URL to perform the GET request
-        string memory s = string.concat('http://app.gradient.city/api/', Strings.toString(positionData[_tokenId].nftfiId));
-        req.add('get', s);
+        // Set the URL to perform the GET request on
+        req.add('get', string.concat('https://app.gradient.city/api/', Strings.toString(positionData[_tokenId].nftfiId)));
 
-        req.add('path', 'floor'); /// Chainlink nodes 1.0.0 and later support this format
+        req.add('path', 'floor'); // Chainlink nodes 1.0.0 and later support this format
 
-        /// Multiply 1
         int256 timesAmount = 1;
         req.addInt('times', timesAmount);
 
-        /// Sends the request
+        // Sends the request
         bytes32 sendRequest = sendChainlinkRequest(req, fee);
         requestToPosition[sendRequest] = _tokenId;
     }
@@ -192,7 +191,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     * @param _requestId Chainlink request ID
     * @param _floor Fetched floor of collateral (wei)
     **/
-    function fulfillValue(bytes32 _requestId, uint256 _floor) public recordChainlinkFulfillment(_requestId) {
+    function fulfill(bytes32 _requestId, uint256 _floor) public recordChainlinkFulfillment(_requestId) {
         emit RequestedFloor(_requestId, _floor);
         activateProtection(requestToPosition[_requestId], _floor);
     }
