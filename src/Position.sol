@@ -20,8 +20,8 @@ interface IDirectLoanBase {
 contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient {
     using Strings for uint256;
     using Chainlink for Chainlink.Request;
-    bytes32 private constant jobId = "9303ebb8365e472eb9a1505a3cc42317";
-    uint256 private constant fee = 4500000000000000000; /// 4.5 LINK
+    bytes32 private jobId;
+    uint256 private fee;
     uint256 private positionIdCounter = 0;
     string public constant baseURI = "https://app.gradient.city/metadata/";
 
@@ -43,6 +43,8 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     constructor(address _linkAddress, address _oracleAddress) ERC721("Gradient Position", "POSITION") {
         setChainlinkToken(_linkAddress);
         setChainlinkOracle(_oracleAddress);
+        jobId = "9303ebb8365e472eb9a1505a3cc42317";
+        fee = (1 * LINK_DIVISIBILITY) / 10;  // 0.1 LINK
     }
 
     /**
