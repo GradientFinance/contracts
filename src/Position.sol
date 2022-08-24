@@ -34,6 +34,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
 
     mapping(bytes32 => uint256) private requestToPosition;
     mapping(uint256 => LoanPosition) public positionData;
+    mapping(address => uint256) public allocatedLiquidity;
 
     event RequestedFloor(bytes32 indexed requestId, uint256 floor);
 
@@ -74,7 +75,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     }
 
     /**
-    * @notice Returns the URL of a token's metadata
+    * @notice Returns the URL of a token's metadata.
     * @param _tokenId Token ID
     **/
     function tokenURI(uint256 _tokenId)
@@ -103,7 +104,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     }
 
     /**
-    * @dev Creates a Chainlink request to retrieve API response to validate the collateral floor
+    * @dev Creates a Chainlink request to retrieve API response to validate the collateral floor.
     * @param _tokenId ID of the position
     **/
     function requestFloor(uint256 _tokenId) private {
@@ -123,7 +124,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     }
 
     /**
-    * @notice Runs the position using the requested floor
+    * @notice Runs the position using the requested floor.
     * @param _tokenId ID of the position 
     **/
     function activateProtection(uint256 _tokenId, uint256 _floor) private {
@@ -187,7 +188,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     }
 
     /**
-    * @dev Recieves oracle response in the form of uint256
+    * @dev Recieves oracle response in the form of uint256.
     * @param _requestId Chainlink request ID
     * @param _floor Fetched floor of collateral (wei)
     **/
@@ -197,10 +198,25 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     }
 
     /**
-    * @notice Allows to withdraw LINK tokens
+    * @notice Allows owner to withdraw LINK tokens.
     **/
     function withdrawLink() external onlyOwner {
         LinkTokenInterface link = LinkTokenInterface(chainlinkTokenAddress());
         require(link.transfer(owner(), link.balanceOf(address(this))), 'Unable to transfer');
+    }
+
+    /**
+    * @notice Allows owner to withdraw allocated liquidity by Gradient.
+    **/
+    function withdrawAllocation() external onlyOwner {
+        (bool transferTx, ) = owner().call{value: allocatedLiquidity[owner()]}("");
+        require(transferTx, "Withdraw allocation transfer failed.");
+    }
+
+    /**
+    * @notice Fallback function to receive ether allocated from Gradient.
+    **/
+    receive() external payable {
+        allocatedLiquidity[owner()] = allocatedLiquidity[owner()] += msg.value;
     }
 }
