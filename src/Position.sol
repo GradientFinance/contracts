@@ -36,7 +36,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     mapping(uint256 => LoanPosition) public positionData;
     mapping(address => uint256) public allocatedLiquidity;
 
-    event RequestedFloor(bytes32 indexed requestId, uint256 floor);
+    event RequestedFloor(bytes32 indexed _requestId, uint256 _floor);
 
     constructor(address _linkAddress, address _oracleAddress) ERC721("Gradient Position", "POSITION") {
         setChainlinkToken(_linkAddress);
