@@ -48,7 +48,7 @@ contract BaseSetup is Test {
     }
 }
 
-contract TestMintLongPositions is BaseSetup {
+contract TestLongSignature is BaseSetup {
     uint256 _margin = 5000000000000000000;
     uint32 _nftfId = 8395;
     bool _position = true;
@@ -61,7 +61,7 @@ contract TestMintLongPositions is BaseSetup {
         BaseSetup.setUp();
     }
 
-    function testMintLong() public {
+    function testLong() public {
         console.log(
             "Mint a long position with correct signature and parameters."
         );
@@ -86,7 +86,7 @@ contract TestMintLongPositions is BaseSetup {
         assertEq(position_contract.ownerOf(1), user);
     }
 
-    function testFailMintLong() public {
+    function testFailLong() public {
         console.log(
             "Mint a long position with incorrect signature and parameters."
         );
@@ -109,7 +109,7 @@ contract TestMintLongPositions is BaseSetup {
     }
 }
 
-contract TestMintShortPositions is BaseSetup {
+contract TestShortSignature is BaseSetup {
     uint256 _margin = 5000000000000000000;
     uint32 _nftfId = 8395;
     bool _position = false;
@@ -122,7 +122,7 @@ contract TestMintShortPositions is BaseSetup {
         BaseSetup.setUp();
     }
 
-    function testMintShort() public {
+    function testShort() public {
         console.log(
             "Mint a short position with correct signature and parameters."
         );
@@ -147,7 +147,7 @@ contract TestMintShortPositions is BaseSetup {
         assertEq(position_contract.ownerOf(1), user);
     }
 
-    function testFailMintShort() public {
+    function testFailShort() public {
         console.log(
             "Mint a short position with incorrect signature and parameters."
         );
