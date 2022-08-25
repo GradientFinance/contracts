@@ -110,13 +110,13 @@ contract TestLongSignature is BaseSetup {
 }
 
 contract TestShortSignature is BaseSetup {
-    uint256 _margin = 5000000000000000000;
+    uint256 _margin = 5000000000000000000;  // 5 ETH
     uint32 _nftfId = 8395;
-    bool _position = false;
-    uint256 _leverage = 1000000000000000000;
-    uint256 _premium = 908438124943164160;
-    uint256 _expiryUnix = 0;
-    uint256 _repayment = 12400000000000000000;
+    bool _position = true;  // Long position
+    uint256 _leverage = 1000000000000000000;  // x1
+    uint256 _premium = 908438124943164160;  // 0.908 ETH
+    uint256 _expiryUnix = 1663700471;  // 20 September 2022
+    uint256 _repayment = 13090000000000000000;  // 13.09 ETH
 
     function setUp() public virtual override {
         BaseSetup.setUp();
