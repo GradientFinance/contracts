@@ -53,12 +53,14 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     * @param _premium Premium return,
     * @param _expiryUnix Unix timmestamp when NFTfi loan expires,
     * @param _repayment Repayment of the NFTfi loan,
-    * @param _signature Address deployer signature of parameters.
+    * @param _v v part of signature,
+    * @param _r r part of signature,
+    * @param _s s part of signature.
     **/
-    function mintPosition(uint32 _nftfiId, bool _position, uint256 _leverage, uint256 _premium, uint256 _expiryUnix, uint256 _repayment, bytes memory _signature) public payable {
+    function mintPosition(uint32 _nftfiId, bool _position, uint256 _leverage, uint256 _premium, uint256 _expiryUnix, uint256 _repayment, uint8 _v, bytes32 _r, bytes32 _s) public payable {
         /// msg.value == margin
         bytes32 message = keccak256(abi.encodePacked(msg.value, _nftfiId, _position, _leverage, _premium, _expiryUnix, _repayment));
-        require(recoverSigner(message, _signature) == owner(), "Invalid signature or parameters");
+        require(ecrecover(message, _v, _r, _s) == owner(), "Invalid signature or parameters");
 
         ++positionIdCounter;
         _safeMint(msg.sender, positionIdCounter);

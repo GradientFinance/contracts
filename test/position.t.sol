@@ -19,6 +19,7 @@ contract BaseSetup is Test {
 
     address internal gradient;
     address internal user;
+    uint256 privateKey = 0xBEEF;
 
     Position public position_contract;
     LinkToken public linkToken;
@@ -27,7 +28,7 @@ contract BaseSetup is Test {
     function setUp() public virtual {
         utils = new Utils();
 
-        gradient = address(0xe7E60d2d6D7dF39810eE973Ae6187b01D4758344);
+        gradient = vm.addr(privateKey);
         vm.label(gradient, "Gradient Deployer");
         vm.deal(gradient, 10000 ether);
 
@@ -45,7 +46,15 @@ contract BaseSetup is Test {
 }
 
 
-contract TestMintPosition is BaseSetup {
+contract TestMintLongPositions is BaseSetup {
+    uint256 _margin = 5000000000000000000;
+    uint32 _nftfId = 8395;
+    bool _position = true;
+    uint256 _leverage = 1000000000000000000;
+    uint256 _premium = 908438124943164160;
+    uint256 _expiryUnix = 0;
+    uint256 _repayment = 12400000000000000000;
+
     function setUp() public virtual override {
         BaseSetup.setUp();
     }
@@ -55,23 +64,107 @@ contract TestMintPosition is BaseSetup {
             "Mint a long position with correct signature and parameters."
         );
 
-        uint256 _margin = 5000000000000000000;
-        uint32 _nftfId = 8395;
-        bool position = true;
-        uint256 _leverage = 1000000000000000000;
-        uint256 _premium = 908438124943164160;
-        uint256 _expiryUnix = 0;
-        uint256 _repayment = 12400000000000000000;
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
 
         vm.prank(user);
         position_contract.mintPosition{ value: _margin }(
             _nftfId,  // _nftfId (uint32)
-            position,  // _position (bool)
+            _position,  // _position (bool)
             _leverage,  // _leverage (uint256)
             _premium,  // _premium (uint256)
             _expiryUnix,  // _expiryUnix (uint256)
             _repayment,   // _repayment (uint256)
-            "0x505b348212c583c84f1fa81b2a8121f9e4cc5f71dcf6d428856a0a96324109626a1bbb18ab4c368b37e6857826b701e6fc899aff5efcd3306d7c301514aa8cef1c"  // _signature (bytes)
+            v,  // v (uint8)
+            r,  // r (bytes32)
+            s  // s (bytes32)
+        );
+
+        assertEq(position_contract.balanceOf(user), 1);
+        assertEq(position_contract.ownerOf(1), user);
+    }
+
+    function testFailMintLong() public {
+        console.log(
+            "Mint a long position with incorrect signature and parameters."
+        );
+
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
+
+        vm.prank(user);
+        position_contract.mintPosition{ value: _margin }(
+            1111,  // _nftfId (uint32)
+            _position,  // _position (bool)
+            _leverage,  // _leverage (uint256)
+            _premium,  // _premium (uint256)
+            _expiryUnix,  // _expiryUnix (uint256)
+            _repayment,   // _repayment (uint256)
+            v,  // v (uint8)
+            r,  // r (bytes32)
+            s  // s (bytes32)
+        );
+    }
+}
+
+
+contract TestMintShortPositions is BaseSetup {
+    uint256 _margin = 5000000000000000000;
+    uint32 _nftfId = 8395;
+    bool _position = false;
+    uint256 _leverage = 1000000000000000000;
+    uint256 _premium = 908438124943164160;
+    uint256 _expiryUnix = 0;
+    uint256 _repayment = 12400000000000000000;
+
+    function setUp() public virtual override {
+        BaseSetup.setUp();
+    }
+
+    function testMintShort() public {
+        console.log(
+            "Mint a short position with correct signature and parameters."
+        );
+
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
+
+        vm.prank(user);
+        position_contract.mintPosition{ value: _margin }(
+            _nftfId,  // _nftfId (uint32)
+            _position,  // _position (bool)
+            _leverage,  // _leverage (uint256)
+            _premium,  // _premium (uint256)
+            _expiryUnix,  // _expiryUnix (uint256)
+            _repayment,   // _repayment (uint256)
+            v,  // v (uint8)
+            r,  // r (bytes32)
+            s  // s (bytes32)
+        );
+
+        assertEq(position_contract.balanceOf(user), 1);
+        assertEq(position_contract.ownerOf(1), user);
+    }
+
+    function testFailMintShort() public {
+        console.log(
+            "Mint a short position with incorrect signature and parameters."
+        );
+
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
+
+        vm.prank(user);
+        position_contract.mintPosition{ value: _margin }(
+            1111,  // _nftfId (uint32)
+            _position,  // _position (bool)
+            _leverage,  // _leverage (uint256)
+            _premium,  // _premium (uint256)
+            _expiryUnix,  // _expiryUnix (uint256)
+            _repayment,   // _repayment (uint256)
+            v,  // v (uint8)
+            r,  // r (bytes32)
+            s  // s (bytes32)
         );
     }
 }
