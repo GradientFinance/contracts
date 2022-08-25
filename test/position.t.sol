@@ -181,6 +181,7 @@ contract TestLongMint is BaseSetup {
     uint256 _repayment = 13090000000000000000;  // 13.09 ETH
     uint256 _response = 140000000000000000001;  // 14 ETH
 
+
     function setUp() public virtual override {
         BaseSetup.setUp();
     }
@@ -213,7 +214,78 @@ contract TestLongMint is BaseSetup {
 
         bytes32 requestId = position_contract.triggerPosition(1);
         mockOracle.fulfillOracleRequest(requestId, bytes32(_response));
-        assertTrue(position_contract.price() == 14000000000000000000);
+        // TODO: Continue long cases
+    }
+}
+
+
+contract TestTriggerPosition is BaseSetup {
+    uint256 _margin = 5000000000000000000;  // 5 ETH
+    uint32 _nftfId = 8395;
+    bool _position = true;  // Long position
+    uint256 _leverage = 1000000000000000000;  // x1
+    uint256 _premium = 908438124943164160;  // 0.908 ETH
+    uint256 _expiryUnix = 1663700471;  // 20 September 2022
+    uint256 _repayment = 13090000000000000000;  // 13.09 ETH
+    uint256 _response = 140000000000000000001;  // 14 ETH
+
+
+    function setUp() public virtual override {
+        BaseSetup.setUp();
+    }
+
+    function testFailNoPosition() public {
+        console.log(
+            "Cannot trigger a position as it doesn't exist."
+        );
+
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
+
+        vm.startPrank(user);
+        position_contract.mintPosition{ value: _margin }(
+            _nftfId,  // _nftfId (uint32)
+            _position,  // _position (bool)
+            _leverage,  // _leverage (uint256)
+            _premium,  // _premium (uint256)
+            _expiryUnix,  // _expiryUnix (uint256)
+            _repayment,   // _repayment (uint256)
+            v,  // v (uint8)
+            r,  // r (bytes32)
+            s  // s (bytes32)
+        );
+
+        assertEq(position_contract.balanceOf(user), 1);
+        assertEq(position_contract.ownerOf(1), user);
+
+        bytes32 requestId = position_contract.triggerPosition(999);
+    }
+
+    function testFailNotExpired() public {
+        console.log(
+            "Cannot trigger a position as the loan has not expired."
+        );
+
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
+
+        vm.startPrank(user);
+        position_contract.mintPosition{ value: _margin }(
+            _nftfId,  // _nftfId (uint32)
+            _position,  // _position (bool)
+            _leverage,  // _leverage (uint256)
+            _premium,  // _premium (uint256)
+            _expiryUnix,  // _expiryUnix (uint256)
+            _repayment,   // _repayment (uint256)
+            v,  // v (uint8)
+            r,  // r (bytes32)
+            s  // s (bytes32)
+        );
+
+        assertEq(position_contract.balanceOf(user), 1);
+        assertEq(position_contract.ownerOf(1), user);
+
+        bytes32 requestId = position_contract.triggerPosition(1);
     }
 }
 
