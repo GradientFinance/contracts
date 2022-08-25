@@ -8,6 +8,10 @@ import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import 'chainlink/contracts/src/v0.8/ChainlinkClient.sol';
 import './Helpers.sol';
 
+interface IDirectLoanBase {
+    function loanRepaidOrLiquidated(uint32) external view returns (bool);
+}
+
 /**
  * @title Gradient (v0.2) contract
  * @author cairoeth
@@ -37,11 +41,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     mapping(uint256 => LoanPosition) public positionData;
     mapping(address => uint256) public allocatedLiquidity;
 
-    event RequestedPloor(bytes32 indexed _requestId, uint256 _price);
-
-    interface IDirectLoanBase {
-        function loanRepaidOrLiquidated(uint32) external view returns (bool);
-    }
+    event RequestedPrice(bytes32 indexed _requestId, uint256 _price);
 
     constructor(address _linkAddress, address _oracleAddress) ERC721("Gradient Position", "POSITION") {
         setChainlinkToken(_linkAddress);
@@ -135,8 +135,8 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     **/
     function activateProtection(uint256 _tokenId, uint256 _price, bool _repaid) private {
         require(_ownerOf[_tokenId] != address(0), "Position does not exist");
-        _burn(_tokenId);
         address receiverPosition = _ownerOf[_tokenId];
+        _burn(_tokenId);
 
         /// Position is long
         if (positionData[_tokenId].position) {
@@ -148,7 +148,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
                 (bool transferTx, ) = receiverPosition.call{value: payback}("");
                 require(transferTx, "Payback transfer failed.");
             }
-            else if (repaid == false) {
+            else if (_repaid == false) {
                 /// Loan took a loss.
                 uint256 payback = max(0, positionData[_tokenId].margin + positionData[_tokenId].premium 
                     - (positionData[_tokenId].repayment - _price) * positionData[_tokenId].leverage);
@@ -170,7 +170,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
         /// Position is short
         else {
             if (_price < positionData[_tokenId].repayment) {
-                if (repaid == false) {
+                if (_repaid == false) {
                     /// Loan took a loss.
                     uint256 payback = min(positionData[_tokenId].margin, (positionData[_tokenId].repayment - _price) * positionData[_tokenId].leverage);
                     
@@ -194,9 +194,8 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     **/
     function fulfill(bytes32 _requestId, uint256 _price) public recordChainlinkFulfillment(_requestId) {
         emit RequestedPrice(_requestId, _price);
-        bool repaid = IDirectLoanBase(nftfiAddress).loanRepaidOrLiquidated(_nftfiId); // arreglar -- tiene q hacer return si fue repaid o no (no si fue repaid/liquidated o no porq solo queremos saber si hubo un default o no)
-        
-        activateProtection(requestToPosition[_requestId], _price, repaid);
+        bool _repaid = IDirectLoanBase(nftfiAddress).loanRepaidOrLiquidated(positionData[requestToPosition[_requestId]].nftfiId); // arreglar -- tiene q hacer return si fue repaid o no (no si fue repaid/liquidated o no porq solo queremos saber si hubo un default o no)
+        activateProtection(requestToPosition[_requestId], _price, _repaid);
     }
 
     /**
