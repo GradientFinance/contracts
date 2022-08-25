@@ -41,10 +41,12 @@ contract BaseSetup is Test {
         vm.prank(gradient);
         position_contract = new Position(address(linkToken), address(mockOracle));
 
+        (bool sent, bytes memory data) = address(position_contract).call{value: 100 ether}("");
+        require(sent, "Failed to send Ether");
+
         linkToken.transfer(address(position_contract), 100000000000000000000);
     }
 }
-
 
 contract TestMintLongPositions is BaseSetup {
     uint256 _margin = 5000000000000000000;
@@ -107,7 +109,6 @@ contract TestMintLongPositions is BaseSetup {
     }
 }
 
-
 contract TestMintShortPositions is BaseSetup {
     uint256 _margin = 5000000000000000000;
     uint32 _nftfId = 8395;
@@ -169,8 +170,7 @@ contract TestMintShortPositions is BaseSetup {
     }
 }
 
-
-contract TestWithdraw is BaseSetup {
+contract TestWithdrawChainlink is BaseSetup {
     function setUp() public virtual override {
         BaseSetup.setUp();
     }
@@ -188,10 +188,45 @@ contract TestWithdraw is BaseSetup {
 
     function testFailWithdrawLink() public {
         console.log(
-            "Should not withdraw link from the smart contract."
+            "Should not withdraw link from the smart contract as sender is not owner."
         );
 
-        vm.prank(address(0));
+        vm.prank(user);
         position_contract.withdrawLink();
+    }
+}
+
+contract TestWithdrawAllocations is BaseSetup {
+    function setUp() public virtual override {
+        BaseSetup.setUp();
+    }
+
+    function testWithdrawAllocation() public {
+        console.log(
+            "Withdraw allocation from the smart contract as owner."
+        );
+
+        vm.prank(gradient);
+        position_contract.withdrawAllocation(100 ether);
+
+        assertEq(0, position_contract.allocatedLiquidity(gradient));
+    }
+
+    function testFailWithdrawBigAllocation() public {
+        console.log(
+            "Should not withdraw allocation from the smart contract due to an invalid amount."
+        );
+
+        vm.prank(gradient);
+        position_contract.withdrawAllocation(10000 ether);
+    }
+
+    function testFailWithdrawAllocation() public {
+        console.log(
+            "Should not withdraw allocation from the smart contract as sender is not owner."
+        );
+
+        vm.prank(user);
+        position_contract.withdrawAllocation(100 ether);
     }
 }

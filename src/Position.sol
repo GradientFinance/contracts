@@ -210,9 +210,11 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     /**
     * @notice Allows owner to withdraw allocated liquidity by Gradient.
     **/
-    function withdrawAllocation() external onlyOwner {
-        (bool transferTx, ) = owner().call{value: allocatedLiquidity[owner()]}("");
+    function withdrawAllocation(uint256 _amount) external onlyOwner {
+        require(_amount <= allocatedLiquidity[owner()]);
+        (bool transferTx, ) = owner().call{value: _amount}("");
         require(transferTx, "Withdraw allocation transfer failed.");
+        allocatedLiquidity[owner()] = allocatedLiquidity[owner()] - _amount;
     }
 
     /**
