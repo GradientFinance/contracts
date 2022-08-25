@@ -98,18 +98,18 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     * @notice Triggers the loan position after loan reaches maturity
     * @param _tokenId ID of the position 
     **/
-    function triggerPosition(uint256 _tokenId) external nonReentrant {
+    function triggerPosition(uint256 _tokenId) external nonReentrant returns (bytes32) {
         require(_ownerOf[_tokenId] != address(0), "Position does not exist");
         require(block.timestamp > positionData[_tokenId].expiryUnix, "Loan not expired");
         
-        requestPrice(_tokenId);
+        return requestPrice(_tokenId);
     }
 
     /**
     * @dev Creates a Chainlink request to retrieve API response to validate the collateral price.
     * @param _tokenId ID of the position
     **/
-    function requestPrice(uint256 _tokenId) private {
+    function requestPrice(uint256 _tokenId) private returns (bytes32) {
         Chainlink.Request memory req = buildChainlinkRequest(jobId, address(this), this.fulfill.selector);
 
         // Set the URL to perform the GET request on
@@ -123,6 +123,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
         // Sends the request
         bytes32 sendRequest = sendChainlinkRequest(req, fee);
         requestToPosition[sendRequest] = _tokenId;
+        return sendRequest;
     }
 
     /**

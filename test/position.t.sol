@@ -41,7 +41,7 @@ contract BaseSetup is Test {
         vm.prank(gradient);
         position_contract = new Position(address(linkToken), address(mockOracle));
 
-        (bool sent, bytes memory data) = address(position_contract).call{value: 100 ether}("");
+        (bool sent, ) = address(position_contract).call{value: 100 ether}("");
         require(sent, "Failed to send Ether");
 
         linkToken.transfer(address(position_contract), 100000000000000000000);
@@ -179,6 +179,7 @@ contract TestLongMint is BaseSetup {
     uint256 _premium = 908438124943164160;  // 0.908 ETH
     uint256 _expiryUnix = 1663700471;  // 20 September 2022
     uint256 _repayment = 13090000000000000000;  // 13.09 ETH
+    uint256 _response = 140000000000000000001;  // 14 ETH
 
     function setUp() public virtual override {
         BaseSetup.setUp();
@@ -209,7 +210,10 @@ contract TestLongMint is BaseSetup {
         assertEq(position_contract.ownerOf(1), user);
 
         vm.warp(_expiryUnix + 1);
-        position_contract.triggerPosition(1);
+
+        bytes32 requestId = position_contract.triggerPosition(1);
+        mockOracle.fulfillOracleRequest(requestId, bytes32(_response));
+        assertTrue(position_contract.price() == 14000000000000000000);
     }
 }
 
