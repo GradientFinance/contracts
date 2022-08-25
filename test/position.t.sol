@@ -27,8 +27,10 @@ contract BaseSetup is Test {
     function setUp() public virtual {
         utils = new Utils();
 
-        gradient = address(0xD23a1F43571E32d55D521c5c3707Fb15AcFbF391);
+        gradient = address(0xe7E60d2d6D7dF39810eE973Ae6187b01D4758344);
         vm.label(gradient, "Gradient Deployer");
+        vm.deal(gradient, 10000 ether);
+
         user = utils.createUsers(1)[0];
         vm.label(user, "User");
 
@@ -41,6 +43,39 @@ contract BaseSetup is Test {
         linkToken.transfer(address(position_contract), 100000000000000000000);
     }
 }
+
+
+contract TestMintPosition is BaseSetup {
+    function setUp() public virtual override {
+        BaseSetup.setUp();
+    }
+
+    function testMintLong() public {
+        console.log(
+            "Mint a long position with correct signature and parameters."
+        );
+
+        uint256 _margin = 5000000000000000000;
+        uint32 _nftfId = 8395;
+        bool position = true;
+        uint256 _leverage = 1000000000000000000;
+        uint256 _premium = 908438124943164160;
+        uint256 _expiryUnix = 0;
+        uint256 _repayment = 12400000000000000000;
+
+        vm.prank(user);
+        position_contract.mintPosition{ value: _margin }(
+            _nftfId,  // _nftfId (uint32)
+            position,  // _position (bool)
+            _leverage,  // _leverage (uint256)
+            _premium,  // _premium (uint256)
+            _expiryUnix,  // _expiryUnix (uint256)
+            _repayment,   // _repayment (uint256)
+            "0x505b348212c583c84f1fa81b2a8121f9e4cc5f71dcf6d428856a0a96324109626a1bbb18ab4c368b37e6857826b701e6fc899aff5efcd3306d7c301514aa8cef1c"  // _signature (bytes)
+        );
+    }
+}
+
 
 contract TestWithdraw is BaseSetup {
     function setUp() public virtual override {
