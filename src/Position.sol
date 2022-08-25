@@ -150,17 +150,12 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
             }
             else if (repaid == false) {
                 /// Loan took a loss.
-                if (_price > (positionData[_tokenId].margin + positionData[_tokenId].premium) / positionData[_tokenId].leverage) {
-                    /// The position wasn't completely wiped, so the user can get some of their funds back.
-                    _burn(_tokenId);
-                    uint256 payback = max(0, positionData[_tokenId].margin + positionData[_tokenId].premium - (positionData[_tokenId].repayment - _price) * positionData[_tokenId].leverage);
-                    
+                _burn(_tokenId);
+                uint256 payback = max(0, positionData[_tokenId].margin + positionData[_tokenId].premium - (positionData[_tokenId].repayment - _price) * positionData[_tokenId].leverage);
+
+                if (payback > 0) {
                     (bool transferTx, ) = receiverPosition.call{value: payback}("");
                     require(transferTx, "Payback transfer failed.");
-                }
-                else {
-                    /// The position was completely wiped, so the user loses the margin and the premium.
-                    _burn(_tokenId);
                 }
             } else {
                 /// Position is canceled because of the edge case, so the margin is returned.
@@ -181,22 +176,11 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
             }
             else if (repaid == false) {
                 /// Loan took a loss.
-                if (_price > (positionData[_tokenId].margin + positionData[_tokenId].premium) / positionData[_tokenId].leverage) {
-                    /// The position wasn't completely wiped, so the user can get some of their funds back.
-                    _burn(_tokenId);
-                    uint256 payback = positionData[_tokenId].margin + positionData[_tokenId].premium - (positionData[_tokenId].repayment - _price) * positionData[_tokenId].leverage;
-                    
-                    (bool transferTx, ) = receiverPosition.call{value: payback}("");
-                    require(transferTx, "Payback transfer failed.");
-                }
-                else {
-                    /// Loan took a loss.
-                    _burn(_tokenId);
-                    uint256 payback = min(positionData[_tokenId].margin, (positionData[_tokenId].repayment - _price) * positionData[_tokenId].leverage);
-                    
-                    (bool transferTx, ) = receiverPosition.call{value: payback}("");
-                    require(transferTx, "Payback transfer failed.");
-                }
+                _burn(_tokenId);
+                uint256 payback = min(positionData[_tokenId].margin, (positionData[_tokenId].repayment - _price) * positionData[_tokenId].leverage);
+                
+                (bool transferTx, ) = receiverPosition.call{value: payback}("");
+                require(transferTx, "Payback transfer failed.");
             } else {
                 /// Position is canceled because of the edge case, so the premium is returned.
                 _burn(_tokenId);
