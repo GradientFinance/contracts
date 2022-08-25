@@ -8,10 +8,6 @@ import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import 'chainlink/contracts/src/v0.8/ChainlinkClient.sol';
 import './Helpers.sol';
 
-interface IDirectLoanBase {
-    function loanRepaidOrLiquidated(uint32) external view returns (bool);
-}
-
 /**
  * @title Gradient (v0.2) contract
  * @author cairoeth
@@ -25,7 +21,6 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     uint256 private fee;
     uint256 private positionIdCounter = 0;
     string public constant baseURI = "https://app.gradient.city/metadata/";
-    address private nftfiAddress;
 
     struct LoanPosition {
         bool position;
@@ -41,14 +36,13 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     mapping(uint256 => LoanPosition) public positionData;
     mapping(address => uint256) public allocatedLiquidity;
 
-    event RequestedPrice(bytes32 indexed _requestId, uint256 _price);
+    event RequestedPrice(bytes32 indexed _requestId, uint256 _value);
 
     constructor(address _linkAddress, address _oracleAddress) ERC721("Gradient Position", "POSITION") {
         setChainlinkToken(_linkAddress);
         setChainlinkOracle(_oracleAddress);
         jobId = 'ca98366cc7314957b8c012c72f05aeeb';
         fee = (1 * LINK_DIVISIBILITY) / 10; // 0,1 * 10**18 (Varies by network and job)
-        nftfiAddress = 0xf896527c49b44aAb3Cf22aE356Fa3AF8E331F280;
     }
 
     /**
@@ -133,7 +127,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     * @notice Runs the position using the requested price.
     * @param _tokenId ID of the position 
     **/
-    function activateProtection(uint256 _tokenId, uint256 _price, bool _repaid) private {
+    function activateProtection(uint256 _tokenId, uint256 _price, uint256 _repaid) private {
         require(_ownerOf[_tokenId] != address(0), "Position does not exist");
         address receiverPosition = _ownerOf[_tokenId];
         _burn(_tokenId);
@@ -148,7 +142,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
                 (bool transferTx, ) = receiverPosition.call{value: payback}("");
                 require(transferTx, "Payback transfer failed.");
             }
-            else if (_repaid == false) {
+            else if (_repaid == 0) {
                 /// Loan took a loss.
                 uint256 payback = max(0, positionData[_tokenId].margin + positionData[_tokenId].premium 
                     - (positionData[_tokenId].repayment - _price) * positionData[_tokenId].leverage);
@@ -170,7 +164,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
         /// Position is short
         else {
             if (_price < positionData[_tokenId].repayment) {
-                if (_repaid == false) {
+                if (_repaid == 0) {
                     /// Loan took a loss.
                     uint256 payback = min(positionData[_tokenId].margin, (positionData[_tokenId].repayment - _price) * positionData[_tokenId].leverage);
                     
@@ -190,11 +184,16 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     /**
     * @dev Recieves oracle response in the form of uint256.
     * @param _requestId Chainlink request ID
-    * @param _price Fetched price of collateral (wei)
+    * @param _value Fetched price of collateral (wei) and repayment state
     **/
-    function fulfill(bytes32 _requestId, uint256 _price) public recordChainlinkFulfillment(_requestId) {
-        emit RequestedPrice(_requestId, _price);
-        bool _repaid = IDirectLoanBase(nftfiAddress).loanRepaidOrLiquidated(positionData[requestToPosition[_requestId]].nftfiId); // arreglar -- tiene q hacer return si fue repaid o no (no si fue repaid/liquidated o no porq solo queremos saber si hubo un default o no)
+    function fulfill(bytes32 _requestId, uint256 _value) public recordChainlinkFulfillment(_requestId) {
+        emit RequestedPrice(_requestId, _value);
+
+        // state = 1 --> repaid
+        // state = 0 --> not repaid
+        uint256 _repaid = _value % 10;
+        uint256 _price = (_value / 10) % (10 ** (bytes(Strings.toString(_value)).length - 1));
+
         activateProtection(requestToPosition[_requestId], _price, _repaid);
     }
 
