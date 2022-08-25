@@ -49,19 +49,19 @@ contract BaseSetup is Test {
 }
 
 contract TestLongSignature is BaseSetup {
-    uint256 _margin = 5000000000000000000;
+    uint256 _margin = 5000000000000000000;  // 5 ETH
     uint32 _nftfId = 8395;
-    bool _position = true;
-    uint256 _leverage = 1000000000000000000;
-    uint256 _premium = 908438124943164160;
-    uint256 _expiryUnix = 0;
-    uint256 _repayment = 12400000000000000000;
+    bool _position = true;  // Long position
+    uint256 _leverage = 1000000000000000000;  // x1
+    uint256 _premium = 908438124943164160;  // 0.908 ETH
+    uint256 _expiryUnix = 1663700471;  // 20 September 2022
+    uint256 _repayment = 13090000000000000000;  // 13.09 ETH
 
     function setUp() public virtual override {
         BaseSetup.setUp();
     }
 
-    function testLong() public {
+    function testLongSignature() public {
         console.log(
             "Mint a long position with correct signature and parameters."
         );
@@ -86,7 +86,7 @@ contract TestLongSignature is BaseSetup {
         assertEq(position_contract.ownerOf(1), user);
     }
 
-    function testFailLong() public {
+    function testFailLongSignature() public {
         console.log(
             "Mint a long position with incorrect signature and parameters."
         );
@@ -112,7 +112,7 @@ contract TestLongSignature is BaseSetup {
 contract TestShortSignature is BaseSetup {
     uint256 _margin = 5000000000000000000;  // 5 ETH
     uint32 _nftfId = 8395;
-    bool _position = true;  // Long position
+    bool _position = false;  // Short position
     uint256 _leverage = 1000000000000000000;  // x1
     uint256 _premium = 908438124943164160;  // 0.908 ETH
     uint256 _expiryUnix = 1663700471;  // 20 September 2022
@@ -122,7 +122,7 @@ contract TestShortSignature is BaseSetup {
         BaseSetup.setUp();
     }
 
-    function testShort() public {
+    function testShortSignature() public {
         console.log(
             "Mint a short position with correct signature and parameters."
         );
@@ -147,7 +147,7 @@ contract TestShortSignature is BaseSetup {
         assertEq(position_contract.ownerOf(1), user);
     }
 
-    function testFailShort() public {
+    function testFailShortSignature() public {
         console.log(
             "Mint a short position with incorrect signature and parameters."
         );
@@ -169,6 +169,50 @@ contract TestShortSignature is BaseSetup {
         );
     }
 }
+
+
+contract TestLongMint is BaseSetup {
+    uint256 _margin = 5000000000000000000;  // 5 ETH
+    uint32 _nftfId = 8395;
+    bool _position = true;  // Long position
+    uint256 _leverage = 1000000000000000000;  // x1
+    uint256 _premium = 908438124943164160;  // 0.908 ETH
+    uint256 _expiryUnix = 1663700471;  // 20 September 2022
+    uint256 _repayment = 13090000000000000000;  // 13.09 ETH
+
+    function setUp() public virtual override {
+        BaseSetup.setUp();
+    }
+
+    function testMintLong() public {
+        console.log(
+            "Mint a long position and activate it."
+        );
+
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
+
+        vm.startPrank(user);
+        position_contract.mintPosition{ value: _margin }(
+            _nftfId,  // _nftfId (uint32)
+            _position,  // _position (bool)
+            _leverage,  // _leverage (uint256)
+            _premium,  // _premium (uint256)
+            _expiryUnix,  // _expiryUnix (uint256)
+            _repayment,   // _repayment (uint256)
+            v,  // v (uint8)
+            r,  // r (bytes32)
+            s  // s (bytes32)
+        );
+
+        assertEq(position_contract.balanceOf(user), 1);
+        assertEq(position_contract.ownerOf(1), user);
+
+        vm.warp(_expiryUnix + 1);
+        position_contract.triggerPosition(1);
+    }
+}
+
 
 contract TestWithdrawChainlink is BaseSetup {
     function setUp() public virtual override {
