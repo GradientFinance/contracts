@@ -299,6 +299,96 @@ contract TestLongMint is BaseSetup, Helpers {
     }
 }
 
+contract TestShortMint is BaseSetup, Helpers {
+    uint256 _margin = 5000000000000000000;  // 5 ETH
+    uint32 _nftfId = 8395;
+    bool _position = false;  // Short position
+    uint256 _leverage = 1000000000000000000;  // x1
+    uint256 _premium = 908438124943164160;  // 0.908 ETH
+    uint256 _expiryUnix = 1663700471;  // 20 September 2022
+    uint256 _repayment = 13090000000000000000;  // 13.09 ETH
+    uint256 _increased = 14000000000000000000;
+    uint256 _decreased = 12000000000000000000;
+    uint256 _decreased_repaid = 120000000000000000001;  // 12 ETH (repayed, extra one at end)
+    uint256 _decreased_notpayed = 120000000000000000000;  // 12 ETH (not repayed, extra zero at end)
+
+    function setUp() public virtual override {
+        BaseSetup.setUp();
+    }
+
+    function testMintShort1() public {
+        console.log(
+            "Mint a short position and activate it for case 1."
+        );
+
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
+
+        vm.startPrank(user);
+        position_contract.mintPosition{ value: _margin }(
+            _nftfId,  // _nftfId (uint32)
+            _position,  // _position (bool)
+            _leverage,  // _leverage (uint256)
+            _premium,  // _premium (uint256)
+            _expiryUnix,  // _expiryUnix (uint256)
+            _repayment,   // _repayment (uint256)
+            v,  // v (uint8)
+            r,  // r (bytes32)
+            s  // s (bytes32)
+        );
+
+        assertEq(position_contract.balanceOf(user), 1);
+        assertEq(position_contract.ownerOf(1), user);
+
+        vm.warp(_expiryUnix + 1);
+
+        // Loan took a loss
+        uint256 payback = min(_margin, (_repayment - _decreased) * (_leverage / 1 ether));
+        uint256 expectedBalance = user.balance + payback;
+
+        bytes32 requestId = position_contract.triggerPosition(1);
+        mockOracle.fulfillOracleRequest(requestId, bytes32(_decreased_notpayed));
+
+        assertEq(expectedBalance, user.balance);
+    }
+
+    function testMintShort2() public {
+        console.log(
+            "Mint a short position and activate it for case 2."
+        );
+
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
+
+        vm.startPrank(user);
+        position_contract.mintPosition{ value: _margin }(
+            _nftfId,  // _nftfId (uint32)
+            _position,  // _position (bool)
+            _leverage,  // _leverage (uint256)
+            _premium,  // _premium (uint256)
+            _expiryUnix,  // _expiryUnix (uint256)
+            _repayment,   // _repayment (uint256)
+            v,  // v (uint8)
+            r,  // r (bytes32)
+            s  // s (bytes32)
+        );
+
+        assertEq(position_contract.balanceOf(user), 1);
+        assertEq(position_contract.ownerOf(1), user);
+
+        vm.warp(_expiryUnix + 1);
+
+        // Position is canceled because of the edge case, so the premium is returned
+        uint256 payback =  _premium;
+        uint256 expectedBalance = user.balance + payback;
+
+        bytes32 requestId = position_contract.triggerPosition(1);
+        mockOracle.fulfillOracleRequest(requestId, bytes32(_decreased_repaid));
+
+        assertEq(expectedBalance, user.balance);
+    }
+}
+
 contract TestTriggerPosition is BaseSetup {
     uint256 _margin = 5000000000000000000;  // 5 ETH
     uint32 _nftfId = 8395;
