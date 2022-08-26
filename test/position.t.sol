@@ -5,7 +5,8 @@ import {console} from "forge-std/console.sol";
 import {stdStorage, StdStorage, Test} from "forge-std/Test.sol";
 
 import {Utils} from "./utils/Utils.sol";
-import "../src/position.sol";
+import "../src/Position.sol";
+import "../src/Helpers.sol";
 
 import "./mocks/LinkToken.sol";
 import "./mocks/MockOracle.sol";
@@ -170,8 +171,7 @@ contract TestShortSignature is BaseSetup {
     }
 }
 
-
-contract TestLongMint is BaseSetup {
+contract TestLongMint is BaseSetup, Helpers {
     uint256 _margin = 5000000000000000000;  // 5 ETH
     uint32 _nftfId = 8395;
     bool _position = true;  // Long position
@@ -179,16 +179,20 @@ contract TestLongMint is BaseSetup {
     uint256 _premium = 908438124943164160;  // 0.908 ETH
     uint256 _expiryUnix = 1663700471;  // 20 September 2022
     uint256 _repayment = 13090000000000000000;  // 13.09 ETH
-    uint256 _response = 140000000000000000001;  // 14 ETH
-
+    uint256 _increased = 14000000000000000000;
+    uint256 _decreased = 12000000000000000000;
+    uint256 _increased_repaid = 140000000000000000001;  // 14 ETH (repayed, extra one at end)
+    uint256 _increased_notpayed = 140000000000000000000;  // 14 ETH (not repayed, extra zero at end)
+    uint256 _decreased_repaid = 120000000000000000001;  // 12 ETH (repayed, extra one at end)
+    uint256 _decreased_notpayed = 120000000000000000000;  // 12 ETH (not repayed, extra zero at end)
 
     function setUp() public virtual override {
         BaseSetup.setUp();
     }
 
-    function testMintLong() public {
+    function testMintLong1() public {
         console.log(
-            "Mint a long position and activate it."
+            "Mint a long position and activate it for case 1."
         );
 
         bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
@@ -212,31 +216,19 @@ contract TestLongMint is BaseSetup {
 
         vm.warp(_expiryUnix + 1);
 
+        // Loan did not end at a loss --> Return margin + premium
+        uint256 payback = _margin + _premium;
+        uint256 expectedBalance = user.balance + payback;
+
         bytes32 requestId = position_contract.triggerPosition(1);
-        mockOracle.fulfillOracleRequest(requestId, bytes32(_response));
-        // TODO: Continue long cases
-    }
-}
+        mockOracle.fulfillOracleRequest(requestId, bytes32(_increased_repaid));
 
-
-contract TestTriggerPosition is BaseSetup {
-    uint256 _margin = 5000000000000000000;  // 5 ETH
-    uint32 _nftfId = 8395;
-    bool _position = true;  // Long position
-    uint256 _leverage = 1000000000000000000;  // x1
-    uint256 _premium = 908438124943164160;  // 0.908 ETH
-    uint256 _expiryUnix = 1663700471;  // 20 September 2022
-    uint256 _repayment = 13090000000000000000;  // 13.09 ETH
-    uint256 _response = 140000000000000000001;  // 14 ETH
-
-
-    function setUp() public virtual override {
-        BaseSetup.setUp();
+        assertEq(expectedBalance, user.balance);
     }
 
-    function testFailNoPosition() public {
+    function testMintLong2() public {
         console.log(
-            "Cannot trigger a position as it doesn't exist."
+            "Mint a long position and activate it for case 2."
         );
 
         bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
@@ -258,7 +250,76 @@ contract TestTriggerPosition is BaseSetup {
         assertEq(position_contract.balanceOf(user), 1);
         assertEq(position_contract.ownerOf(1), user);
 
-        bytes32 requestId = position_contract.triggerPosition(999);
+        vm.warp(_expiryUnix + 1);
+
+        // Loan took a loss
+        uint256 payback = max(0, _margin + _premium - (_repayment - _decreased) * (_leverage / 1 ether));
+        uint256 expectedBalance = user.balance + payback;
+
+        bytes32 requestId = position_contract.triggerPosition(1);
+        mockOracle.fulfillOracleRequest(requestId, bytes32(_decreased_notpayed));
+
+        assertEq(expectedBalance, user.balance);
+    }
+
+    function testMintLong3() public {
+        console.log(
+            "Mint a long position and activate it for case 3."
+        );
+
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
+
+        vm.startPrank(user);
+        position_contract.mintPosition{ value: _margin }(
+            _nftfId,  // _nftfId (uint32)
+            _position,  // _position (bool)
+            _leverage,  // _leverage (uint256)
+            _premium,  // _premium (uint256)
+            _expiryUnix,  // _expiryUnix (uint256)
+            _repayment,   // _repayment (uint256)
+            v,  // v (uint8)
+            r,  // r (bytes32)
+            s  // s (bytes32)
+        );
+
+        assertEq(position_contract.balanceOf(user), 1);
+        assertEq(position_contract.ownerOf(1), user);
+
+        vm.warp(_expiryUnix + 1);
+
+        // Position is canceled because of the edge case, so the margin is returned
+        uint256 payback = _margin;
+        uint256 expectedBalance = user.balance + payback;
+
+        bytes32 requestId = position_contract.triggerPosition(1);
+        mockOracle.fulfillOracleRequest(requestId, bytes32(_decreased_repaid));
+
+        assertEq(expectedBalance, user.balance);
+    }
+}
+
+contract TestTriggerPosition is BaseSetup {
+    uint256 _margin = 5000000000000000000;  // 5 ETH
+    uint32 _nftfId = 8395;
+    bool _position = true;  // Long position
+    uint256 _leverage = 1000000000000000000;  // x1
+    uint256 _premium = 908438124943164160;  // 0.908 ETH
+    uint256 _expiryUnix = 1663700471;  // 20 September 2022
+    uint256 _repayment = 13090000000000000000;  // 13.09 ETH
+    uint256 _response = 140000000000000000001;  // 14 ETH
+
+
+    function setUp() public virtual override {
+        BaseSetup.setUp();
+    }
+
+    function testFailNoPosition() public {
+        console.log(
+            "Cannot trigger a position as it doesn't exist."
+        );
+
+        position_contract.triggerPosition(999);
     }
 
     function testFailNotExpired() public {
@@ -285,10 +346,9 @@ contract TestTriggerPosition is BaseSetup {
         assertEq(position_contract.balanceOf(user), 1);
         assertEq(position_contract.ownerOf(1), user);
 
-        bytes32 requestId = position_contract.triggerPosition(1);
+        position_contract.triggerPosition(1);
     }
 }
-
 
 contract TestWithdrawChainlink is BaseSetup {
     function setUp() public virtual override {
