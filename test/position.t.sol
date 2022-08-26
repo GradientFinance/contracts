@@ -308,6 +308,7 @@ contract TestShortMint is BaseSetup, Helpers {
     uint256 _expiryUnix = 1663700471;  // 20 September 2022
     uint256 _repayment = 13090000000000000000;  // 13.09 ETH
     uint256 _increased = 14000000000000000000;
+    uint256 _increased_repaid = 140000000000000000001;
     uint256 _decreased = 12000000000000000000;
     uint256 _decreased_repaid = 120000000000000000001;  // 12 ETH (repayed, extra one at end)
     uint256 _decreased_notpayed = 120000000000000000000;  // 12 ETH (not repayed, extra zero at end)
@@ -384,6 +385,42 @@ contract TestShortMint is BaseSetup, Helpers {
 
         bytes32 requestId = position_contract.triggerPosition(1);
         mockOracle.fulfillOracleRequest(requestId, bytes32(_decreased_repaid));
+
+        assertEq(expectedBalance, user.balance);
+    }
+
+    function testMintShort3() public {
+        console.log(
+            "Mint a short position and activate it for case 3."
+        );
+
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
+
+        vm.startPrank(user);
+        position_contract.mintPosition{ value: _margin }(
+            _nftfId,  // _nftfId (uint32)
+            _position,  // _position (bool)
+            _leverage,  // _leverage (uint256)
+            _premium,  // _premium (uint256)
+            _expiryUnix,  // _expiryUnix (uint256)
+            _repayment,   // _repayment (uint256)
+            v,  // v (uint8)
+            r,  // r (bytes32)
+            s  // s (bytes32)
+        );
+
+        assertEq(position_contract.balanceOf(user), 1);
+        assertEq(position_contract.ownerOf(1), user);
+
+        vm.warp(_expiryUnix + 1);
+
+        // Position is lost.
+        uint256 payback =  0;
+        uint256 expectedBalance = user.balance + payback;
+
+        bytes32 requestId = position_contract.triggerPosition(1);
+        mockOracle.fulfillOracleRequest(requestId, bytes32(_increased_repaid));
 
         assertEq(expectedBalance, user.balance);
     }
@@ -498,5 +535,32 @@ contract TestWithdrawAllocations is BaseSetup {
 
         vm.prank(user);
         position_contract.withdrawAllocation(100 ether);
+    }
+}
+
+contract TestChainlink is BaseSetup {
+    bytes32 _id = 'ca00366cc7314957b8c012c72f05aeeb';
+    uint256 _fee = 1;
+
+    function setUp() public virtual override {
+        BaseSetup.setUp();
+    }
+
+    function testDefineVariables() public {
+        console.log(
+            "Redefine Chainlink variables as owner."
+        );
+
+        vm.prank(gradient);
+        position_contract.redefineChainlink(_id, _fee);
+    }
+
+    function testFailDefineVariables() public {
+        console.log(
+            "Should not redefine Chainlink variables as owner."
+        );
+
+        vm.prank(user);
+        position_contract.redefineChainlink(_id, _fee);
     }
 }

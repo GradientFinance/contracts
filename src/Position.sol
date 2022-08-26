@@ -219,6 +219,14 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     }
 
     /**
+    * @notice Allows owner to redefine Chainlink variables.
+    **/
+    function redefineChainlink(bytes32 _id, uint256 _fee) external onlyOwner {
+        jobId = _id;
+        fee = _fee;
+    }
+    
+    /**
     * @notice Fallback function to receive ether allocated from Gradient.
     **/
     receive() external payable {
