@@ -28,13 +28,12 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
         uint256 leverage;
         uint256 premium;
         uint256 expiryUnix;
-        uint256 repayment;
+        uint256 principal;
         uint32 nftfiId;
     }
 
     mapping(bytes32 => uint256) private requestToPosition;
     mapping(uint256 => LoanPosition) public positionData;
-    mapping(address => uint256) public allocatedLiquidity;
 
     event RequestedPrice(bytes32 indexed _requestId, uint256 _value);
 
@@ -52,14 +51,14 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     * @param _leverage Increases the risk of getting wiped out but also the potential profits,
     * @param _premium Premium return,
     * @param _expiryUnix Unix timmestamp when NFTfi loan expires,
-    * @param _repayment Repayment of the NFTfi loan,
+    * @param _principal Principal of the NFTfi loan,
     * @param _v v part of signature,
     * @param _r r part of signature,
     * @param _s s part of signature.
     **/
-    function mintPosition(uint32 _nftfiId, bool _position, uint256 _leverage, uint256 _premium, uint256 _expiryUnix, uint256 _repayment, uint8 _v, bytes32 _r, bytes32 _s) public payable {
+    function mintPosition(uint32 _nftfiId, bool _position, uint256 _leverage, uint256 _premium, uint256 _expiryUnix, uint256 _principal, uint8 _v, bytes32 _r, bytes32 _s) public payable {
         /// msg.value == margin
-        bytes32 message = keccak256(abi.encodePacked(msg.value, _nftfiId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        bytes32 message = keccak256(abi.encodePacked(msg.value, _nftfiId, _position, _leverage, _premium, _expiryUnix, _principal));
         require(ecrecover(message, _v, _r, _s) == owner(), "Invalid signature or parameters");
 
         ++positionIdCounter;
@@ -71,7 +70,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
             leverage: _leverage / 1 ether,
             premium: _premium,
             expiryUnix: _expiryUnix,
-            repayment: _repayment,
+            principal: _principal,
             nftfiId: _nftfiId
         });
     }
@@ -137,7 +136,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
 
         /// Position is long
         if (positionData[_tokenId].position) {
-            if (_price >= positionData[_tokenId].repayment) {
+            if (_price >= positionData[_tokenId].principal) {
                 /// Loan did not end at a loss.
                 uint256 payback = positionData[_tokenId].margin + positionData[_tokenId].premium;
                 
@@ -148,7 +147,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
             else if (_repaid == 0) {
                 /// Loan took a loss.
                 uint256 payback = max(0, positionData[_tokenId].margin + positionData[_tokenId].premium 
-                    - (positionData[_tokenId].repayment - _price) * positionData[_tokenId].leverage);
+                    - (positionData[_tokenId].principal - _price) * positionData[_tokenId].leverage);
 
                 if (payback > 0) {
                     (bool transferTx, ) = receiverPosition.call{value: payback}("");
@@ -166,10 +165,10 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
 
         /// Position is short
         else {
-            if (_price < positionData[_tokenId].repayment) {
+            if (_price < positionData[_tokenId].principal) {
                 if (_repaid == 0) {
                     /// Loan took a loss.
-                    uint256 payback = min(positionData[_tokenId].margin, (positionData[_tokenId].repayment - _price) * positionData[_tokenId].leverage);
+                    uint256 payback = min(positionData[_tokenId].margin, (positionData[_tokenId].principal - _price) * positionData[_tokenId].leverage);
                     
                     (bool transferTx, ) = receiverPosition.call{value: payback}("");
                     require(transferTx, "Payback transfer failed.");
@@ -212,10 +211,8 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     * @notice Allows owner to withdraw allocated liquidity by Gradient.
     **/
     function withdrawAllocation(uint256 _amount) external onlyOwner {
-        require(_amount <= allocatedLiquidity[owner()]);
         (bool transferTx, ) = owner().call{value: _amount}("");
         require(transferTx, "Withdraw allocation transfer failed.");
-        allocatedLiquidity[owner()] = allocatedLiquidity[owner()] - _amount;
     }
 
     /**
@@ -229,7 +226,5 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     /**
     * @notice Fallback function to receive ether allocated from Gradient.
     **/
-    receive() external payable {
-        allocatedLiquidity[owner()] = allocatedLiquidity[owner()] += msg.value;
-    }
+    receive() external payable {}
 }

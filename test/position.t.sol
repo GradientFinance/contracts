@@ -56,7 +56,7 @@ contract TestLongSignature is BaseSetup {
     uint256 _leverage = 1000000000000000000;  // x1
     uint256 _premium = 908438124943164160;  // 0.908 ETH
     uint256 _expiryUnix = 1663700471;  // 20 September 2022
-    uint256 _repayment = 13090000000000000000;  // 13.09 ETH
+    uint256 _principal = 13000000000000000000;  // 13 ETH
 
     function setUp() public virtual override {
         BaseSetup.setUp();
@@ -67,7 +67,7 @@ contract TestLongSignature is BaseSetup {
             "Mint a long position with correct signature and parameters."
         );
 
-        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _principal));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
 
         vm.prank(user);
@@ -77,7 +77,7 @@ contract TestLongSignature is BaseSetup {
             _leverage,  // _leverage (uint256)
             _premium,  // _premium (uint256)
             _expiryUnix,  // _expiryUnix (uint256)
-            _repayment,   // _repayment (uint256)
+            _principal,   // _principal (uint256)
             v,  // v (uint8)
             r,  // r (bytes32)
             s  // s (bytes32)
@@ -92,7 +92,7 @@ contract TestLongSignature is BaseSetup {
             "Mint a long position with incorrect signature and parameters."
         );
 
-        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _principal));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
 
         vm.prank(user);
@@ -102,7 +102,7 @@ contract TestLongSignature is BaseSetup {
             _leverage,  // _leverage (uint256)
             _premium,  // _premium (uint256)
             _expiryUnix,  // _expiryUnix (uint256)
-            _repayment,   // _repayment (uint256)
+            _principal,   // _principal (uint256)
             v,  // v (uint8)
             r,  // r (bytes32)
             s  // s (bytes32)
@@ -117,7 +117,7 @@ contract TestShortSignature is BaseSetup {
     uint256 _leverage = 1000000000000000000;  // x1
     uint256 _premium = 908438124943164160;  // 0.908 ETH
     uint256 _expiryUnix = 1663700471;  // 20 September 2022
-    uint256 _repayment = 13090000000000000000;  // 13.09 ETH
+    uint256 _principal = 13000000000000000000;  // 13 ETH
 
     function setUp() public virtual override {
         BaseSetup.setUp();
@@ -128,7 +128,7 @@ contract TestShortSignature is BaseSetup {
             "Mint a short position with correct signature and parameters."
         );
 
-        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _principal));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
 
         vm.prank(user);
@@ -138,7 +138,7 @@ contract TestShortSignature is BaseSetup {
             _leverage,  // _leverage (uint256)
             _premium,  // _premium (uint256)
             _expiryUnix,  // _expiryUnix (uint256)
-            _repayment,   // _repayment (uint256)
+            _principal,   // _principal (uint256)
             v,  // v (uint8)
             r,  // r (bytes32)
             s  // s (bytes32)
@@ -153,7 +153,7 @@ contract TestShortSignature is BaseSetup {
             "Mint a short position with incorrect signature and parameters."
         );
 
-        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _principal));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
 
         vm.prank(user);
@@ -163,7 +163,7 @@ contract TestShortSignature is BaseSetup {
             _leverage,  // _leverage (uint256)
             _premium,  // _premium (uint256)
             _expiryUnix,  // _expiryUnix (uint256)
-            _repayment,   // _repayment (uint256)
+            _principal,   // _principal (uint256)
             v,  // v (uint8)
             r,  // r (bytes32)
             s  // s (bytes32)
@@ -178,7 +178,7 @@ contract TestLongMint is BaseSetup, Helpers {
     uint256 _leverage = 1000000000000000000;  // x1
     uint256 _premium = 908438124943164160;  // 0.908 ETH
     uint256 _expiryUnix = 1663700471;  // 20 September 2022
-    uint256 _repayment = 13090000000000000000;  // 13.09 ETH
+    uint256 _principal = 13000000000000000000;  // 13 ETH
     uint256 _increased = 14000000000000000000;
     uint256 _decreased = 12000000000000000000;
     uint256 _increased_repaid = 140000000000000000001;  // 14 ETH (repayed, extra one at end)
@@ -195,7 +195,7 @@ contract TestLongMint is BaseSetup, Helpers {
             "Mint a long position and activate it for case 1."
         );
 
-        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _principal));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
 
         vm.startPrank(user);
@@ -205,7 +205,7 @@ contract TestLongMint is BaseSetup, Helpers {
             _leverage,  // _leverage (uint256)
             _premium,  // _premium (uint256)
             _expiryUnix,  // _expiryUnix (uint256)
-            _repayment,   // _repayment (uint256)
+            _principal,   // _principal (uint256)
             v,  // v (uint8)
             r,  // r (bytes32)
             s  // s (bytes32)
@@ -231,7 +231,7 @@ contract TestLongMint is BaseSetup, Helpers {
             "Mint a long position and activate it for case 2."
         );
 
-        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _principal));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
 
         vm.startPrank(user);
@@ -241,7 +241,7 @@ contract TestLongMint is BaseSetup, Helpers {
             _leverage,  // _leverage (uint256)
             _premium,  // _premium (uint256)
             _expiryUnix,  // _expiryUnix (uint256)
-            _repayment,   // _repayment (uint256)
+            _principal,   // _principal (uint256)
             v,  // v (uint8)
             r,  // r (bytes32)
             s  // s (bytes32)
@@ -253,7 +253,7 @@ contract TestLongMint is BaseSetup, Helpers {
         vm.warp(_expiryUnix + 1);
 
         // Loan took a loss
-        uint256 payback = max(0, _margin + _premium - (_repayment - _decreased) * (_leverage / 1 ether));
+        uint256 payback = max(0, _margin + _premium - (_principal - _decreased) * (_leverage / 1 ether));
         uint256 expectedBalance = user.balance + payback;
 
         bytes32 requestId = position_contract.triggerPosition(1);
@@ -267,7 +267,7 @@ contract TestLongMint is BaseSetup, Helpers {
             "Mint a long position and activate it for case 3."
         );
 
-        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _principal));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
 
         vm.startPrank(user);
@@ -277,7 +277,7 @@ contract TestLongMint is BaseSetup, Helpers {
             _leverage,  // _leverage (uint256)
             _premium,  // _premium (uint256)
             _expiryUnix,  // _expiryUnix (uint256)
-            _repayment,   // _repayment (uint256)
+            _principal,   // _principal (uint256)
             v,  // v (uint8)
             r,  // r (bytes32)
             s  // s (bytes32)
@@ -306,7 +306,7 @@ contract TestShortMint is BaseSetup, Helpers {
     uint256 _leverage = 1000000000000000000;  // x1
     uint256 _premium = 908438124943164160;  // 0.908 ETH
     uint256 _expiryUnix = 1663700471;  // 20 September 2022
-    uint256 _repayment = 13090000000000000000;  // 13.09 ETH
+    uint256 _principal = 13000000000000000000;  // 13 ETH
     uint256 _increased = 14000000000000000000;
     uint256 _increased_repaid = 140000000000000000001;
     uint256 _decreased = 12000000000000000000;
@@ -322,7 +322,7 @@ contract TestShortMint is BaseSetup, Helpers {
             "Mint a short position and activate it for case 1."
         );
 
-        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _principal));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
 
         vm.startPrank(user);
@@ -332,7 +332,7 @@ contract TestShortMint is BaseSetup, Helpers {
             _leverage,  // _leverage (uint256)
             _premium,  // _premium (uint256)
             _expiryUnix,  // _expiryUnix (uint256)
-            _repayment,   // _repayment (uint256)
+            _principal,   // _principal (uint256)
             v,  // v (uint8)
             r,  // r (bytes32)
             s  // s (bytes32)
@@ -344,7 +344,7 @@ contract TestShortMint is BaseSetup, Helpers {
         vm.warp(_expiryUnix + 1);
 
         // Loan took a loss
-        uint256 payback = min(_margin, (_repayment - _decreased) * (_leverage / 1 ether));
+        uint256 payback = min(_margin, (_principal - _decreased) * (_leverage / 1 ether));
         uint256 expectedBalance = user.balance + payback;
 
         bytes32 requestId = position_contract.triggerPosition(1);
@@ -358,7 +358,7 @@ contract TestShortMint is BaseSetup, Helpers {
             "Mint a short position and activate it for case 2."
         );
 
-        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _principal));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
 
         vm.startPrank(user);
@@ -368,7 +368,7 @@ contract TestShortMint is BaseSetup, Helpers {
             _leverage,  // _leverage (uint256)
             _premium,  // _premium (uint256)
             _expiryUnix,  // _expiryUnix (uint256)
-            _repayment,   // _repayment (uint256)
+            _principal,   // _principal (uint256)
             v,  // v (uint8)
             r,  // r (bytes32)
             s  // s (bytes32)
@@ -394,7 +394,7 @@ contract TestShortMint is BaseSetup, Helpers {
             "Mint a short position and activate it for case 3."
         );
 
-        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _principal));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
 
         vm.startPrank(user);
@@ -404,7 +404,7 @@ contract TestShortMint is BaseSetup, Helpers {
             _leverage,  // _leverage (uint256)
             _premium,  // _premium (uint256)
             _expiryUnix,  // _expiryUnix (uint256)
-            _repayment,   // _repayment (uint256)
+            _principal,   // _principal (uint256)
             v,  // v (uint8)
             r,  // r (bytes32)
             s  // s (bytes32)
@@ -433,7 +433,7 @@ contract TestTriggerPosition is BaseSetup {
     uint256 _leverage = 1000000000000000000;  // x1
     uint256 _premium = 908438124943164160;  // 0.908 ETH
     uint256 _expiryUnix = 1663700471;  // 20 September 2022
-    uint256 _repayment = 13090000000000000000;  // 13.09 ETH
+    uint256 _principal = 13000000000000000000;  // 13 ETH
     uint256 _response = 140000000000000000001;  // 14 ETH
 
 
@@ -454,7 +454,7 @@ contract TestTriggerPosition is BaseSetup {
             "Cannot trigger a position as the loan has not expired."
         );
 
-        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _repayment));
+        bytes32 hash = keccak256(abi.encodePacked(_margin, _nftfId, _position, _leverage, _premium, _expiryUnix, _principal));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
 
         vm.startPrank(user);
@@ -464,7 +464,7 @@ contract TestTriggerPosition is BaseSetup {
             _leverage,  // _leverage (uint256)
             _premium,  // _premium (uint256)
             _expiryUnix,  // _expiryUnix (uint256)
-            _repayment,   // _repayment (uint256)
+            _principal,   // _principal (uint256)
             v,  // v (uint8)
             r,  // r (bytes32)
             s  // s (bytes32)
@@ -491,6 +491,7 @@ contract TestWithdrawChainlink is BaseSetup {
         position_contract.withdrawLink();
 
         assertEq(0, linkToken.balanceOf(address(position_contract)));
+        assertEq(100000000000000000000, linkToken.balanceOf(address(gradient)));
     }
 
     function testFailWithdrawLink() public {
@@ -516,7 +517,8 @@ contract TestWithdrawAllocations is BaseSetup {
         vm.prank(gradient);
         position_contract.withdrawAllocation(100 ether);
 
-        assertEq(0, position_contract.allocatedLiquidity(gradient));
+        assertEq(0, address(position_contract).balance);
+        assertEq(10100 ether, gradient.balance);
     }
 
     function testFailWithdrawBigAllocation() public {
