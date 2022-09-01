@@ -36,6 +36,8 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
     mapping(uint256 => LoanPosition) public positionData;
 
     event RequestedPrice(bytes32 indexed _requestId, uint256 _value);
+    event PositionMinted(LoanPosition attributes);
+    event PositionActivated(uint256 positionId);
 
     constructor(address _linkAddress, address _oracleAddress) ERC721("Gradient Position", "POSITION") {
         setChainlinkToken(_linkAddress);
@@ -64,7 +66,7 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
         ++positionIdCounter;
         _safeMint(msg.sender, positionIdCounter);
 
-        positionData[positionIdCounter] = LoanPosition({
+        LoanPosition memory position_attributes = LoanPosition({
             position: _position,
             margin: msg.value,
             leverage: _leverage / 1 ether,
@@ -73,6 +75,9 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
             principal: _principal,
             nftfiId: _nftfiId
         });
+
+        positionData[positionIdCounter] = position_attributes;
+        emit PositionMinted(position_attributes);
     }
 
     /**
@@ -133,6 +138,8 @@ contract Position is ERC721, Ownable, ReentrancyGuard, Helpers, ChainlinkClient 
         require(_ownerOf[_tokenId] != address(0), "Position does not exist");
         address receiverPosition = _ownerOf[_tokenId];
         _burn(_tokenId);
+
+        emit PositionActivated(_tokenId);
 
         /// Position is long
         if (positionData[_tokenId].position) {
